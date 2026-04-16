@@ -1,110 +1,141 @@
-from typing import List
-import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.services.map_service import Map_client 
-from dotenv import load_dotenv
- 
-import asyncio
+import sys
+import json
+import logging
+from typing import List
 from contextlib import asynccontextmanager
 
-load_dotenv() 
-from mcp.server import FastMCP
+from dotenv import load_dotenv
+from fastmcp import FastMCP
+from mcp.types import PromptMessage, TextContent
+
+load_dotenv()
+
+# Anchor log file to project directory, not cwd
+LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trafficly.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_PATH),
+        logging.StreamHandler(sys.stderr)
+    ]
+)
+logger = logging.getLogger("trafficly")
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from app.services.map_service import Map_client
 
 my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))
 
+
 @asynccontextmanager
 async def lifespan(server):
-    # startup
     yield
-    # shutdown
-    await my_maps_client.aclose()
-app = FastMCP("navigation and route planning", lifespan=lifespan)
+    await my_maps_client.client.aclose()
+
+
+app = FastMCP("trafficly", lifespan=lifespan)
+
+
 @app.tool()
-async def get_route_info(start_address: str, end_address: str, intermediate_stops:List[str]= None,  departure_time: str = "now"):
-    """
-    Calculate the optimal route between two addresses with optional intermediate stops.
+async def get_route_info(
+    start_address: str,
+    end_address: str,
+    intermediate_stops: List[str] = None,
+    departure_time: str = "now"
+):
+    """Calculate the optimal route between two addresses with optional intermediate stops."""
+    logger.info(f"[TOOL] get_route_info called | start={start_address} end={end_address} stops={intermediate_stops} departure={departure_time}")
     
-    Uses the Google Maps Routes API to compute a traffic-aware route from a starting point 
-    to a destination. Automatically geocodes all provided addresses and returns detailed 
-    route information including distance, duration, and turn-by-turn instructions.
-    
-    Args:
-        start_address (str): The starting address for the route. Can be a full address 
-            (e.g., "1600 Amphitheatre Parkway, Mountain View, CA") or any valid address format.
-        end_address (str): The destination address for the route. Must be a valid address.
-        intermediate_stops (List[str], optional): A list of addresses for intermediate stops 
-            along the route. Defaults to None (no intermediate stops).
-        departure_time (str, optional): The desired departure time. Accepts:
-            - "now": Depart immediately (default)
-            - "HH:MM" or "HH:MMAM/PM" format (e.g., "14:30", "2:30PM")
-            Defaults to "now".
-    
-    Returns:
-        dict: A dictionary containing route information with the following structure:
-            {
-                "routes": [
-                    {
-                        "duration": "duration string",
-                        "distanceMeters": int,
-                        "legs": [
-                            {
-                                "duration": "leg duration string",
-                                "distanceMeters": int,
-                                "startLocation": {"latitude": float, "longitude": float},
-                                "endLocation": {"latitude": float, "longitude": float},
-                                "steps": [...]
-                            }
-                        ]
-                    }
-                ]
-            }
-            Returns None if the route calculation fails.
-    
-    Raises:
-        Exception: May raise exceptions if geocoding fails or API calls encounter errors.
-    
-    Examples:
-        >>> # Simple route from SF to LA
-        >>> route = await get_route_info("San Francisco, CA", "Los Angeles, CA")
-        
-        >>> # Route with a stop in Bakersfield
-        >>> route = await get_route_info(
-        ...     "San Francisco, CA",
-        ...     "Los Angeles, CA",
-        ...     intermediate_stops=["Bakersfield, CA"]
-        ... )
-        
-        >>> # Route departing at 2:30 PM
-        >>> route = await get_route_info(
-        ...     "New York, NY",
-        ...     "Boston, MA",
-        ...     departure_time="2:30PM"
-        ... )
-    
-    Note:
-        - All addresses are automatically geocoded to latitude/longitude coordinates
-        - The route is traffic-aware and may provide multiple alternative routes
-        - Departure time is interpreted in the timezone of the origin location
-        - Requires valid Google Maps API credentials in the environment
-    """
     geocode_a = await my_maps_client.get_geocode(start_address)
-    print(f"Start geocode: {geocode_a}")
-    print(await my_maps_client.get_timezone(geocode_a))
     geocode_b = await my_maps_client.get_geocode(end_address)
-    print(f"End geocode: {geocode_b}")
-    #intermediat stops are expected to be a list of addresses, so we need to geocode them as well
+
     intermediate_stops = intermediate_stops or []
     for i, stop in enumerate(intermediate_stops):
-        geocode_stop = await my_maps_client.get_geocode(stop)
-        print(f"Intermediate stop {i} geocode: {geocode_stop}")
-        intermediate_stops[i] = geocode_stop
+        intermediate_stops[i] = await my_maps_client.get_geocode(stop)
 
-    route_data = await my_maps_client.calculate_route(geocode_a, geocode_b, stops=intermediate_stops, departure_time=departure_time)
+    route_data = await my_maps_client.calculate_route(
+        geocode_a, geocode_b,
+        stops=intermediate_stops,
+        departure_time=departure_time
+    )
+    logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
     return route_data
 
-def main():
-    app.run(transport="stdio")
-if __name__ =="__main__":
-    main()
+@app.prompt()
+def navigation_prompt(
+    start: str,
+    end: str,
+    detail_level: str = "summary",
+    departure_time: str = "now",
+    stops: str = ""          # always str — MCP sends all prompt args as strings
+) -> list[PromptMessage]:
+    """
+    Generate a navigation prompt for Trafficly.
 
+    Args:
+        start: The starting address or location name.
+        end: The destination address or location name.
+        detail_level: Either 'summary' for high-level overview or 'detailed' for turn-by-turn.
+        departure_time: Desired departure time e.g. 'now' or '2:30PM'.
+        stops: Comma-separated intermediate stops e.g. 'TBS Lagos, Union Bank Marina'.
+    """
+    # Parse the comma-separated string into a list
+    stops_list = [s.strip() for s in stops.split(",") if s.strip()] if stops else []
+    stops_text = f" with stops at {', '.join(stops_list)}" if stops_list else ""
+    stops_arg = json.dumps(stops_list)
+
+    if detail_level == "detailed":
+        presentation_instruction = (
+            "Present the result as clear turn-by-turn directions. "
+            "For each step include the maneuver, street name, and distance. "
+            "Group steps by leg if there are multiple stops. "
+            "End with total distance and estimated travel time."
+        )
+    else:
+        presentation_instruction = (
+            "Summarise the route in plain conversational language — like how a friend would describe it. "
+            "Mention only major roads or landmarks to pass through, skip granular steps. "
+            "End with total distance and estimated travel time."
+        )
+
+    prompt_text = f"""
+You are a navigation assistant for Trafficly.
+
+The user wants to travel from '{start}' to '{end}'{stops_text}, departing at {departure_time}.
+
+## Step 1 — Fetch the route
+Call the get_route_info tool with EXACTLY these arguments:
+- start_address: "{start}"
+- end_address: "{end}"
+- intermediate_stops: {stops_arg}
+- departure_time: "{departure_time}"
+
+Do NOT proceed until you have the tool response.
+
+## Step 2 — Use ONLY the tool data
+- Never infer, guess, or recall road names from memory.
+- Every road name, distance, and duration must come directly from the tool response.
+- If a road name is not in the tool response, do not mention it.
+
+## Step 3 — Present the route
+{presentation_instruction}
+""".strip()
+
+    logger.info(f"[PROMPT] navigation_prompt rendered | start={start} end={end} stops={stops_list} detail={detail_level}")
+
+    return [
+        PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=prompt_text)
+        )
+    ]
+
+
+def main():
+    app.run(transport="http", host="0.0.0.0", port=8000)
+
+if __name__ == "__main__":
+    main()
