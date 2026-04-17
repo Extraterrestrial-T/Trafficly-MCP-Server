@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from mcp.types import PromptMessage, TextContent
+from fastapi import FastAPI
 
 load_dotenv()
 
@@ -36,10 +37,11 @@ async def lifespan(server):
     await my_maps_client.client.aclose()
 
 
-app = FastMCP("trafficly", lifespan=lifespan)
+mcp = FastMCP("trafficly", lifespan=lifespan)
+app = FastAPI()
+app.mount("/mcp", mcp)
 
-
-@app.tool()
+@mcp.tool()
 async def get_route_info(
     start_address: str,
     end_address: str,
@@ -64,7 +66,7 @@ async def get_route_info(
     logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
     return route_data
 
-@app.prompt()
+@mcp.prompt()
 def navigation_prompt(
     start: str,
     end: str,
@@ -134,8 +136,8 @@ Do NOT proceed until you have the tool response.
     ]
 
 
-def main():
-    app.run(transport="http", host="0.0.0.0", port=8000)
+#def main():
+    #mcp.run(transport="http", host="0.0.0.0", port=8000)
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+    #main()
