@@ -39,7 +39,8 @@ async def lifespan(server):
 
 mcp = FastMCP("trafficly", lifespan=lifespan)
 app = FastAPI()
-app.mount("/mcp", mcp)
+
+app.mount("/mcp",mcp.http_app(path="/mcp"))
 
 @mcp.tool()
 async def get_route_info(
