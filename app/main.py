@@ -45,8 +45,7 @@ auth = ClerkProvider(
     domain=os.environ["CLERK_DOMAIN"],           
     client_id=os.environ["CLERK_CLIENT_ID"],
     client_secret=os.environ["CLERK_CLIENT_SECRET"],
-    base_url=os.environ["MCP_SERVER_URL"],
-    storage_dir = "/tmp/fastmcp-oauth"     
+    base_url=os.environ["MCP_SERVER_URL"],     
 )
 mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 app = FastAPI()
