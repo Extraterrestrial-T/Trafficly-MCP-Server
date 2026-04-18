@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from mcp.types import PromptMessage, TextContent
 from fastapi import FastAPI
+from fastmcp.server.auth.providers.clerk import ClerkProvider
 
+
+#logging.getLogger("fastmcp").setLevel(logging.DEBUG)
 load_dotenv()
 
 # Anchor log file to project directory, not cwd
@@ -37,10 +40,23 @@ async def lifespan(server):
     await my_maps_client.client.aclose()
 
 
-mcp = FastMCP("trafficly", lifespan=lifespan)
-app = FastAPI()
 
-app.mount("/mcp",mcp.http_app(path="/mcp"))
+auth = ClerkProvider(
+    domain=os.environ["CLERK_DOMAIN"],           
+    client_id=os.environ["CLERK_CLIENT_ID"],
+    client_secret=os.environ["CLERK_CLIENT_SECRET"],
+    base_url=os.environ["MCP_SERVER_URL"],     
+)
+mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
+app = FastAPI()
+@app.get("/.well-known/oauth-protected-resource")
+async def oauth_protected_resource():
+    return {
+        "resource": os.environ["MCP_SERVER_URL"],
+        "authorization_servers": [f"https://{os.environ['CLERK_DOMAIN']}"],
+    }
+app.mount("/",mcp.http_app(path="/mcp"))
+
 
 @mcp.tool()
 async def get_route_info(
