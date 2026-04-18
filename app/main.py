@@ -22,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        #logging.FileHandler(LOG_PATH),
+        logging.FileHandler(LOG_PATH),
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -45,7 +45,8 @@ auth = ClerkProvider(
     domain=os.environ["CLERK_DOMAIN"],           
     client_id=os.environ["CLERK_CLIENT_ID"],
     client_secret=os.environ["CLERK_CLIENT_SECRET"],
-    base_url=os.environ["MCP_SERVER_URL"],     
+    base_url=os.environ["MCP_SERVER_URL"],
+    storage_dir = "/tmp/fastmcp-oauth"     
 )
 mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 app = FastAPI()
