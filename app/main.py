@@ -12,6 +12,10 @@ from fastapi import FastAPI
 from fastmcp.server.auth.providers.clerk import ClerkProvider
 from key_value.aio.stores.redis import RedisStore
 from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+from key_value.aio.wrappers.prefix_collections import PrefixCollectionsWrapper
+from cryptography.fernet import Fernet
+from urllib.parse import urlparse
+
 
 
 #logging.getLogger("fastmcp").setLevel(logging.DEBUG)
@@ -41,20 +45,22 @@ async def lifespan(server):
     yield
     await my_maps_client.client.aclose()
 
-redis_store = RedisStore.from_url(os.environ["UPSTASH_REDIS_URL"])
-# Upstash requires SSL, so make sure your URL starts with rediss://
 
-encrypted_store = FernetEncryptionWrapper(
-    key_value=redis_store,
-    encryption_key=os.environ["FASTMCP_ENCRYPTION_KEY"]
+base_store = RedisStore(url=os.environ["UPSTASH_REDIS_URL"])
+
+oauth_store = PrefixCollectionsWrapper(base_store, prefix="oauth:")
+cache_store = PrefixCollectionsWrapper(base_store, prefix="cache:")
+
+encrypted_oauth_store = FernetEncryptionWrapper(
+    key_value=oauth_store,
+    fernet=Fernet(os.environ["FASTMCP_ENCRYPTION_KEY"])
 )
-
 auth = ClerkProvider(
     domain=os.environ["CLERK_DOMAIN"],           
     client_id=os.environ["CLERK_CLIENT_ID"],
     client_secret=os.environ["CLERK_CLIENT_SECRET"],
     base_url=os.environ["MCP_SERVER_URL"],
-    client_storage =  encrypted_store   
+    client_storage =  encrypted_oauth_store   
 )
 mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 app = FastAPI()
