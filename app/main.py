@@ -17,6 +17,8 @@ from key_value.aio.wrappers.prefix_collections import PrefixCollectionsWrapper
 from mcp.types import PromptMessage, TextContent
 import redis.asyncio as aioredis
 import httpx
+from fastmcp.utilities.lifespan import combine_lifespans
+
 
 load_dotenv()
 
@@ -70,7 +72,7 @@ auth = ClerkProvider(
 # ─── Lifespan ───────────────────────────────────────────────────────────────
 
 @asynccontextmanager
-async def lifespan(server):
+async def lifespan(app):
     await redis_client.initialize()
     yield
     await my_maps_client.client.aclose()
@@ -84,6 +86,9 @@ mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 
 app = FastAPI()
 
+app = FastAPI(
+    lifespan=combine_lifespans(lifespan, mcp.http_app(path="/mcp").lifespan)  # ← both combined
+)
 # ClerkProvider already exposes /.well-known/oauth-authorization-server
 # internally. We only need to add the protected-resource doc manually
 # because FastMCP mounts it under /mcp, not at root.
