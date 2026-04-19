@@ -87,9 +87,8 @@ mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 # ─── FastAPI wrapper ─────────────────────────────────────────────────────────
 
 
-
-app = FastAPI(
-    lifespan= mcp.http_app(path="/mcp").lifespan )
+mcp_app = mcp.http_app(path="/mcp")
+app = FastAPI(lifespan= mcp_app.lifespan )
 # ClerkProvider already exposes /.well-known/oauth-authorization-server
 # internally. We only need to add the protected-resource doc manually
 # because FastMCP mounts it under /mcp, not at root.
@@ -102,7 +101,7 @@ async def oauth_protected_resource():
 
 # Mount FastMCP last — catches everything else including its own
 # /.well-known/oauth-authorization-server and /oauth/callback routes.
-app.mount("/", mcp.http_app(path="/mcp"))
+app.mount("/", mcp_app)
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
