@@ -16,6 +16,7 @@ colorama==0.4.6
 cryptography==46.0.7
 cyclopts==4.10.2
 dnspython==2.8.0
+docopt==0.6.2
 docstring_parser==0.18.0
 docutils==0.22.4
 ecdsa==0.19.2
@@ -52,6 +53,7 @@ openapi-pydantic==0.5.1
 opentelemetry-api==1.41.0
 packaging==26.1
 pathable==0.5.0
+pipreqs==0.4.13
 platformdirs==4.9.6
 py-key-value-aio==0.4.4
 pyasn1==0.6.3
@@ -69,6 +71,7 @@ python-multipart==0.0.26
 pywin32==311; platform_system == "Windows"
 pywin32-ctypes==0.2.3;  platform_system == "Windows"
 PyYAML==6.0.3
+redis==7.4.0
 referencing==0.37.0
 requests==2.33.1
 rich==15.0.0
@@ -91,4 +94,5 @@ urllib3==2.6.3
 uvicorn==0.44.0
 watchfiles==1.1.1
 websockets==16.0
+yarg==0.1.10
 zipp==3.23.1
