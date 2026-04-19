@@ -43,14 +43,16 @@ redis_client = aioredis.from_url(
     ssl_cert_reqs=None,
     decode_responses=False,
 )
-
-base_store    = RedisStore(client=redis_client)
-oauth_store   = PrefixCollectionsWrapper(base_store, prefix="oauth:")
+base_store = RedisStore(client=redis_client)
 
 encrypted_oauth_store = FernetEncryptionWrapper(
-    key_value=oauth_store,
+    key_value=base_store,
     fernet=Fernet(os.environ["FASTMCP_ENCRYPTION_KEY"]),
 )
+#base_store    = RedisStore(client=redis_client)
+#oauth_store   = PrefixCollectionsWrapper(base_store, prefix="oauth:")
+
+
 
 # ─── Auth ───────────────────────────────────────────────────────────────────
 
