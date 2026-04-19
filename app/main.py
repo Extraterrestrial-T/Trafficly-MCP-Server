@@ -15,6 +15,7 @@ from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 from key_value.aio.wrappers.prefix_collections import PrefixCollectionsWrapper
 from cryptography.fernet import Fernet
 from urllib.parse import urlparse
+import redis.asyncio as aioredis
 
 
 
@@ -40,13 +41,23 @@ from app.services.map_service import Map_client
 my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))
 
 
+
+
+
+redis_client = aioredis.from_url(
+    os.environ["UPSTASH_REDIS_URL"],
+    ssl_cert_reqs=None,  # Upstash uses certs that need this
+    decode_responses=False,
+)
+
 @asynccontextmanager
 async def lifespan(server):
+    await redis_client.initialize()
     yield
     await my_maps_client.client.aclose()
+    await redis_client.aclose()
 
-
-base_store = RedisStore(url=os.environ["UPSTASH_REDIS_URL"])
+base_store = RedisStore(client=redis_client)
 
 oauth_store = PrefixCollectionsWrapper(base_store, prefix="oauth:")
 cache_store = PrefixCollectionsWrapper(base_store, prefix="cache:")
