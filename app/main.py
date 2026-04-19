@@ -64,7 +64,7 @@ auth = ClerkProvider(
     client_id=os.environ["CLERK_CLIENT_ID"],
     client_secret=os.environ["CLERK_CLIENT_SECRET"],
     base_url=MCP_SERVER_URL,
-    client_storage=encrypted_oauth_store,
+    #client_storage=encrypted_oauth_store,
 )
 
 # ─── Lifespan ───────────────────────────────────────────────────────────────
