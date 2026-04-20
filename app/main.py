@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import logging
-from typing import List
+from typing import List, Optional
 from contextlib import asynccontextmanager
 
 from cryptography.fernet import Fernet
@@ -109,8 +109,8 @@ app.mount("/", mcp_app)
 async def get_route_info(
     start_address: str,
     end_address: str,
-    intermediate_stops: List[str] = None,
-    departure_time: str = "now",
+    intermediate_stops: Optional[List[str]] = None,
+    departure_time: Optional[str] = "now",
 ):
     """Calculate the optimal route between two addresses with optional intermediate stops."""
     logger.info(f"[TOOL] get_route_info | {start_address} → {end_address}")
