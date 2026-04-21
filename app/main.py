@@ -43,7 +43,7 @@ my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))
 
 # ─── Redis ──────────────────────────────────────────────────────────────────
 
-upstash_redis = UpstashRedis(url=os.getenv("UPSTASH_REDIS_URL"), encryption_key=os.getenv("FERNET_KEY"))
+upstash_redis = UpstashRedis(url=os.getenv("UPSTASH_REDIS_URL"), encryption_key=os.getenv("FASTMCP_ENCRYPTION_KEY"))
 
 
 # ─── Auth ───────────────────────────────────────────────────────────────────
