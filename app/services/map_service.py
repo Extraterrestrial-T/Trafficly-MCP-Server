@@ -130,8 +130,7 @@ class Map_client():
         location_fragment = quote_plus(f"{lat},{lng}")
         timestamp = int(asyncio.get_event_loop().time()) #current time in seconds since epoch
         url = f"{self.timezone_base_url}?location={location_fragment}&timestamp={timestamp}&key={self.api_key}"
-        #print(f"Timezone URL: {url}") #PLEASE REMOVE THIS DEBUG STATEMENT BEFORE DEPLOYING TO PRODUCTION 
-        #curl -L -X GET 'https://maps.googleapis.com/maps/api/timezone/json?location=39.6034810%2C-119.6822510×tamp=1733428634&key=YOUR_API_KEY'
+        
         try:
             response = await self.client.get(url)
             #print(response)

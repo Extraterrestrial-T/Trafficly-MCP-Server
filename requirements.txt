@@ -68,7 +68,7 @@ pyperclip==1.11.0
 python-dotenv==1.2.2
 python-jose==3.5.0
 python-multipart==0.0.26
-pywin32==311; platform_system == "Windows"
+pywin32==311;  platform_system == "Windows"
 pywin32-ctypes==0.2.3;  platform_system == "Windows"
 PyYAML==6.0.3
 redis==7.4.0
@@ -85,6 +85,7 @@ shellingham==1.5.4
 six==1.17.0
 sse-starlette==3.3.4
 starlette==1.0.0
+tenacity==9.1.4
 typer==0.24.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
