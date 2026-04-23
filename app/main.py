@@ -142,7 +142,7 @@ async def get_route_info(
             stops=intermediate_stops,
             departure_time=departure_time,
         )
-        upstash_redis.base_redis_client.set(key, json.dumps(route_data), ex=3600)  # Cache for 1 hour
+        cached_status = await upstash_redis.base_redis_client.set(key, json.dumps(route_data), ex=3600)  # Cache for 1 hour
         logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
     if detail_level == "detailed":
         additional_info = {"guidiance_prompt": 
