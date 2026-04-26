@@ -352,7 +352,7 @@ async def get_route_info(
         f"{departure_time}|{','.join(intermediate_stops or []).lower().strip()}".encode()
     ).hexdigest()
 
-    cached_route = await upstash_redis.cache_store.get(key)
+    cached_route = await upstash_redis.base_redis_client.get(key)
     if cached_route:
         logger.info(f"[TOOL] get_route_info | {start_address} → {end_address} (cached)")
         route_data = json.loads(cached_route)
@@ -371,7 +371,7 @@ async def get_route_info(
             stops=stops,
             departure_time=departure_time,
         )
-        await upstash_redis.cache_store.set(key, json.dumps(route_data), ex=3600)
+        await upstash_redis.base_redis_client.set(key, json.dumps(route_data), ex=3600)
         logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
 
     if detail_level == "detailed":
