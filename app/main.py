@@ -382,6 +382,7 @@ async def get_route_info(
                     "Skip granular steps. Be friendly and concise.")
 
     return {
+        "route_id": key,
         "route_data": route_data,
         "guidance_prompt": guidance,
         "next_step": "Call show_route_map with start_address, end_address, route_data, and detail_level to display the interactive map.",
@@ -389,24 +390,29 @@ async def get_route_info(
 
 
 @mcp.tool(app=AppConfig(resource_uri=VIEW_URI))
-def show_route_map(
+async def show_route_map(
     start_address: str,
     end_address: str,
-    route_data: dict,
+    route_id: str,
     detail_level: str = "summary",
 ) -> str:
     """
     Display an interactive Leaflet map with the route drawn along actual roads.
-    Call this immediately after get_route_info using its route_data output.
+    Call this immediately after get_route_info using its route_id output.
 
     Args:
         start_address: Starting location label
         end_address: Destination label
-        route_data: The route_data dict returned by get_route_info
+        route_id: The route_id returned from get_route_info, used to fetch route_data from cache
         detail_level: "summary" or "detailed"
     """
     global _map_html_cache
-
+    #fectch route from cache
+    cached_route = await upstash_redis.base_redis_client.get(route_id)
+    if not cached_route:
+        return "Error: Route data expired or not found. Please call get_route_info again."
+        
+    route_data = json.loads(cached_route)
     routes   = route_data.get("routes", [{}])
     best     = routes[0] if routes else {}
     legs     = best.get("legs", [{}])
@@ -506,7 +512,7 @@ Do NOT proceed until you have the tool response.
 Immediately call show_route_map with:
 - start_address: "{start}"
 - end_address: "{end}"
-- route_data: <the route_data field from step 1>
+- route_id : <the route_id field from step 1>
 - detail_level: "{detail_level}"
 
 ## Step 3 — Describe the route
