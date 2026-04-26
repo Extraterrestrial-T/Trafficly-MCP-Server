@@ -22,6 +22,12 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 import hashlib
 
+# ── Prefab imports ────────────────────────────────────────────────────────────
+from prefab_ui.app import PrefabApp
+from prefab_ui.components import (
+    Column, Row, Grid, Heading, Text, Muted, Badge,
+    Card, CardContent, Separator, CustomHTML,
+)
 
 load_dotenv()
 
@@ -43,8 +49,10 @@ my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))
 
 # ─── Redis ──────────────────────────────────────────────────────────────────
 
-upstash_redis = UpstashRedis(url=os.getenv("UPSTASH_REDIS_URL"), encryption_key=os.getenv("FASTMCP_ENCRYPTION_KEY"))
-
+upstash_redis = UpstashRedis(
+    url=os.getenv("UPSTASH_REDIS_URL"),
+    encryption_key=os.getenv("FASTMCP_ENCRYPTION_KEY"),
+)
 
 # ─── Auth ───────────────────────────────────────────────────────────────────
 
@@ -74,14 +82,11 @@ async def lifespan(server):
 
 mcp = FastMCP("trafficly", lifespan=lifespan, auth=auth)
 
-# ─── FastAPI wrapper ─────────────────────────────────────────────────────────
-
+# ─── FastAPI wrapper ──────────────────────────────────────────────────────────
 
 mcp_app = mcp.http_app(path="/mcp")
-app = FastAPI(lifespan= mcp_app.lifespan )
-# ClerkProvider already exposes /.well-known/oauth-authorization-server
-# internally. We only need to add the protected-resource doc manually
-# because FastMCP mounts it under /mcp, not at root.
+app = FastAPI(lifespan=mcp_app.lifespan)
+
 @app.get("/.well-known/oauth-protected-resource")
 async def oauth_protected_resource():
     return JSONResponse({
@@ -89,9 +94,323 @@ async def oauth_protected_resource():
         "authorization_servers": [f"https://{CLERK_DOMAIN}"],
     })
 
-# Mount FastMCP last — catches everything else including its own
-# /.well-known/oauth-authorization-server and /oauth/callback routes.
 app.mount("/", mcp_app)
+
+
+# ─── Map HTML builder ─────────────────────────────────────────────────────────
+
+def _build_map_html(
+    encoded_polyline: str,
+    start_address: str,
+    end_address: str,
+    origin_lat: float,
+    origin_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+    waypoints: list,           # list of {"latitude": ..., "longitude": ...}
+    steps: list,               # list of {"instruction": str, "distance_m": int, "maneuver": str}
+    distance_km: float,
+    duration_min: int,
+    detail_level: str,
+) -> str:
+    """
+    Build a self-contained HTML string with:
+    - Leaflet.js map rendering the actual road polyline
+    - Google polyline decoder (pure JS, no extra deps)
+    - Numbered markers for origin, waypoints, destination
+    - Side panel with step list
+    Works in any iframe / CustomHTML host.
+    """
+    waypoints_js = json.dumps(waypoints)
+    steps_js     = json.dumps(steps)
+    detail_js    = json.dumps(detail_level)
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Trafficly</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  body {{
+    font-family: 'DM Sans', 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }}
+
+  /* ── Header ── */
+  .header {{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #1a1d2e;
+    border-bottom: 1px solid #2d3148;
+    flex-shrink: 0;
+  }}
+  .logo {{ font-size: 18px; font-weight: 700; color: #60a5fa; letter-spacing: -0.5px; }}
+  .route-label {{ font-size: 13px; color: #94a3b8; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+  .stats {{ display: flex; gap: 16px; flex-shrink:0; }}
+  .stat {{ text-align:center; }}
+  .stat-value {{ font-size: 15px; font-weight: 700; color: #f1f5f9; }}
+  .stat-label {{ font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }}
+
+  /* ── Main body ── */
+  .body {{
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }}
+
+  /* ── Map ── */
+  #map {{
+    flex: 1;
+    min-width: 0;
+  }}
+
+  /* ── Steps panel ── */
+  .steps-panel {{
+    width: 280px;
+    flex-shrink: 0;
+    background: #1a1d2e;
+    border-left: 1px solid #2d3148;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }}
+  .steps-header {{
+    padding: 12px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid #2d3148;
+    flex-shrink: 0;
+  }}
+  .steps-list {{
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 0;
+  }}
+  .steps-list::-webkit-scrollbar {{ width: 4px; }}
+  .steps-list::-webkit-scrollbar-track {{ background: transparent; }}
+  .steps-list::-webkit-scrollbar-thumb {{ background: #2d3148; border-radius: 2px; }}
+
+  .step {{
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1e2235;
+    transition: background 0.15s;
+  }}
+  .step:hover {{ background: #202336; }}
+  .step-num {{
+    min-width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2d3148;
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }}
+  .step-num.origin  {{ background: #1d4ed8; color: #fff; }}
+  .step-num.dest    {{ background: #dc2626; color: #fff; }}
+  .step-body {{ flex:1; min-width:0; }}
+  .step-instruction {{
+    font-size: 12.5px;
+    color: #cbd5e1;
+    line-height: 1.4;
+    word-break: break-word;
+  }}
+  .step-dist {{
+    font-size: 11px;
+    color: #475569;
+    margin-top: 3px;
+  }}
+
+  /* Leaflet dark tile override */
+  .leaflet-tile-pane {{ filter: brightness(0.85) saturate(0.8); }}
+  .leaflet-control-attribution {{ font-size: 9px !important; background: rgba(0,0,0,0.5) !important; color: #64748b !important; }}
+  .leaflet-control-attribution a {{ color: #475569 !important; }}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <span class="logo">⚡ Trafficly</span>
+  <span class="route-label">{start_address} → {end_address}</span>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value">{distance_km} km</div>
+      <div class="stat-label">Distance</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{duration_min} min</div>
+      <div class="stat-label">Est. time</div>
+    </div>
+  </div>
+</div>
+
+<!-- Body -->
+<div class="body">
+  <div id="map"></div>
+  <div class="steps-panel">
+    <div class="steps-header">Directions</div>
+    <div class="steps-list" id="steps-list"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Data from Python ──────────────────────────────────────────────────────────
+const ENCODED_POLYLINE = {json.dumps(encoded_polyline)};
+const ORIGIN  = {{ lat: {origin_lat}, lng: {origin_lng} }};
+const DEST    = {{ lat: {dest_lat},   lng: {dest_lng}   }};
+const WAYPOINTS  = {waypoints_js};
+const STEPS      = {steps_js};
+const DETAIL     = {detail_js};
+
+// ── Google polyline decoder ───────────────────────────────────────────────────
+function decodePolyline(encoded) {{
+  const points = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {{
+    let b, shift = 0, result = 0;
+    do {{ b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; }} while (b >= 0x20);
+    lat += (result & 1) ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do {{ b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; }} while (b >= 0x20);
+    lng += (result & 1) ? ~(result >> 1) : result >> 1;
+    points.push([lat / 1e5, lng / 1e5]);
+  }}
+  return points;
+}}
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+const map = L.map('map', {{ zoomControl: true, attributionControl: true }});
+
+L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+  attribution: '© <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19,
+}}).addTo(map);
+
+// ── Draw polyline ─────────────────────────────────────────────────────────────
+let routeLine;
+if (ENCODED_POLYLINE) {{
+  const coords = decodePolyline(ENCODED_POLYLINE);
+  routeLine = L.polyline(coords, {{
+    color: '#3b82f6',
+    weight: 5,
+    opacity: 0.9,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }}).addTo(map);
+  map.fitBounds(routeLine.getBounds(), {{ padding: [32, 32] }});
+}} else {{
+  // Fallback: straight line if no polyline
+  const coords = [ORIGIN, ...WAYPOINTS.map(w => ({{lat: w.latitude, lng: w.longitude}})), DEST];
+  routeLine = L.polyline(coords.map(c => [c.lat, c.lng]), {{
+    color: '#3b82f6', weight: 4, opacity: 0.8, dashArray: '8 6',
+  }}).addTo(map);
+  map.fitBounds(routeLine.getBounds(), {{ padding: [32, 32] }});
+}}
+
+// ── Custom marker factory ─────────────────────────────────────────────────────
+function makeMarker(label, bgColor) {{
+  return L.divIcon({{
+    className: '',
+    html: `<div style="
+      width:28px;height:28px;border-radius:50%;
+      background:${{bgColor}};color:#fff;
+      font-size:11px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;
+      border:2px solid rgba(255,255,255,0.3);
+      box-shadow:0 2px 8px rgba(0,0,0,0.5);
+    ">${{label}}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  }});
+}}
+
+// Origin marker
+L.marker([ORIGIN.lat, ORIGIN.lng], {{ icon: makeMarker('A', '#1d4ed8') }})
+  .addTo(map)
+  .bindPopup(`<b>Start</b><br/>{start_address}`);
+
+// Waypoint markers
+WAYPOINTS.forEach((wp, i) => {{
+  L.marker([wp.latitude, wp.longitude], {{ icon: makeMarker(i + 2, '#7c3aed') }})
+    .addTo(map)
+    .bindPopup(`<b>Stop ${{i + 2}}</b>`);
+}});
+
+// Destination marker
+L.marker([DEST.lat, DEST.lng], {{ icon: makeMarker('B', '#dc2626') }})
+  .addTo(map)
+  .bindPopup(`<b>Destination</b><br/>{end_address}`);
+
+// ── Steps panel ───────────────────────────────────────────────────────────────
+const panel = document.getElementById('steps-list');
+
+// Filter steps for summary mode: keep meaningful maneuvers only
+const displaySteps = DETAIL === 'detailed'
+  ? STEPS
+  : STEPS.filter(s => s.maneuver && !['DEPART','ARRIVE',''].includes(s.maneuver)).slice(0, 8);
+
+// Origin row
+panel.innerHTML += `
+  <div class="step">
+    <div class="step-num origin">A</div>
+    <div class="step-body">
+      <div class="step-instruction">{start_address}</div>
+      <div class="step-dist">Start</div>
+    </div>
+  </div>`;
+
+displaySteps.forEach((step, i) => {{
+  const distText = step.distance_m > 1000
+    ? (step.distance_m / 1000).toFixed(1) + ' km'
+    : step.distance_m + ' m';
+  panel.innerHTML += `
+    <div class="step">
+      <div class="step-num">${{i + 1}}</div>
+      <div class="step-body">
+        <div class="step-instruction">${{step.instruction}}</div>
+        <div class="step-dist">${{distText}}</div>
+      </div>
+    </div>`;
+}});
+
+// Destination row
+panel.innerHTML += `
+  <div class="step">
+    <div class="step-num dest">B</div>
+    <div class="step-body">
+      <div class="step-instruction">{end_address}</div>
+      <div class="step-dist">Destination</div>
+    </div>
+  </div>`;
+</script>
+</body>
+</html>
+"""
+
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
 
@@ -103,60 +422,158 @@ async def get_route_info(
     intermediate_stops: Optional[List[str]] = None,
     departure_time: Optional[str] = "now",
     detail_level: Optional[str] = "summary",
-    ctx:Context = CurrentContext(),
-    
+    ctx: Context = CurrentContext(),
 ):
-    
     """Calculate the optimal route between two addresses with optional intermediate stops.
-        Now with caching and retry logic for improved reliability!
+
+    After fetching the route, ALWAYS call show_route_map with the same arguments
+    plus the route_data returned here. This renders an interactive map for the user.
+
     Args:
-    start_address: The starting point of the route (e.g. "1600 Amphithe atre Parkway, Mountain View, CA")
-    end_address: The destination point of the route (e.g. "1 Infinite Loop, Cupertino, CA")
-    intermediate_stops: Optional list of intermediate stops (e.g. ["TBS Lagos", "Union Bank Marina"])
-    departure_time: Optional departure time (e.g. "now" or "2024-06-01T14:30:00")
-    detail_level: "summary" for high-level overview, "detailed" for turn-by-turn directions
+        start_address: Starting point (e.g. "Victoria Island, Lagos")
+        end_address: Destination (e.g. "Ikeja, Lagos")
+        intermediate_stops: Optional ordered list of stops between start and end
+        departure_time: "now" or a time like "2:30PM"
+        detail_level: "summary" for overview, "detailed" for turn-by-turn
     Returns:
-        The calculated route information, with description_detail level based on the input parameter. The result is cached in Redis for 1 hour to speed up repeated requests.
+        Route data including polyline, steps, distance, duration. Pass this
+        directly to show_route_map to render the interactive map.
     """
     key = "route:" + hashlib.md5(
-        f"{start_address.lower().strip()}|{end_address.lower().strip()}|{departure_time}|{",".join(intermediate_stops or []).lower().strip()}".encode()
+        f"{start_address.lower().strip()}|{end_address.lower().strip()}|"
+        f"{departure_time}|{','.join(intermediate_stops or []).lower().strip()}".encode()
     ).hexdigest()
 
-    # Check cache first
-    cached_route = await upstash_redis.base_redis_client.get(key)
+    cached_route = await upstash_redis.cache_store.get(key)
     if cached_route:
         logger.info(f"[TOOL] get_route_info | {start_address} → {end_address} (cached)")
-        return json.loads(cached_route)
-    else: 
+        route_data = json.loads(cached_route)
+    else:
         logger.info(f"[TOOL] get_route_info | {start_address} → {end_address}")
 
         geocode_a = await my_maps_client.get_geocode(start_address)
         geocode_b = await my_maps_client.get_geocode(end_address)
 
-        intermediate_stops = intermediate_stops or []
-        for i, stop in enumerate(intermediate_stops):
-            intermediate_stops[i] = await my_maps_client.get_geocode(stop)
+        stops = intermediate_stops or []
+        for i, stop in enumerate(stops):
+            stops[i] = await my_maps_client.get_geocode(stop)
 
         route_data = await my_maps_client.calculate_route(
             geocode_a, geocode_b,
-            stops=intermediate_stops,
+            stops=stops,
             departure_time=departure_time,
         )
-        cached_status = await upstash_redis.base_redis_client.set(key, json.dumps(route_data), ex=3600)  # Cache for 1 hour
+        # route_data already includes polyline via updated map_service FieldMask
+        await upstash_redis.cache_store.set(key, json.dumps(route_data), ex=3600)
         logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
+
     if detail_level == "detailed":
-        additional_info = {"guidiance_prompt": 
-                           ("The user requested detailed turn-by-turn directions. "
-                           "Please include maneuvers, street names, and distances for each step, in an organized, friendly and helpful manner.")}
+        guidance = ("Present detailed turn-by-turn directions: maneuvers, street names, "
+                    "distances per step, grouped by leg if stops exist.")
     else:
-        additional_info = {"guidiance_prompt": 
-                           ("The user requested a summary of the route. "
-                            "Please provide a high-level overview mentioning only major roads or landmarks, and skip granular steps like turns."
-                            "Provide the information in a clear and conversational manner, as if describing the route to a friend.")} 
-    return route_data, additional_info
+        guidance = ("Give a conversational summary mentioning only major roads or landmarks. "
+                    "Skip granular steps. Be friendly and concise.")
+
+    return {
+        "route_data": route_data,
+        "guidance_prompt": guidance,
+        "next_step": "Call show_route_map with start_address, end_address, route_data, and detail_level to display the interactive map.",
+    }
+
+
+@mcp.tool(app=True)
+def show_route_map(
+    start_address: str,
+    end_address: str,
+    route_data: dict,
+    detail_level: str = "summary",
+) -> PrefabApp:
+    """
+    Display an interactive Leaflet map with the route drawn along actual roads.
+    Call this immediately after get_route_info using its route_data output.
+
+    Args:
+        start_address: Starting location label
+        end_address: Destination label
+        route_data: The route_data dict returned by get_route_info
+        detail_level: "summary" or "detailed" — controls step panel verbosity
+    """
+    routes   = route_data.get("routes", [{}])
+    best     = routes[0] if routes else {}
+    legs     = best.get("legs", [{}])
+    first    = legs[0] if legs else {}
+    last_leg = legs[-1] if legs else {}
+
+    # ── Distance & duration ───────────────────────────────────────────────────
+    dist_m   = best.get("distanceMeters", 0)
+    dist_km  = round(dist_m / 1000, 1) if dist_m else 0
+
+    dur_raw  = best.get("duration", "0s")
+    dur_sec  = int(dur_raw.replace("s", "") or 0) if isinstance(dur_raw, str) else int(dur_raw)
+    dur_min  = max(1, round(dur_sec / 60))
+
+    # ── Polyline ─────────────────────────────────────────────────────────────
+    encoded_polyline = best.get("polyline", {}).get("encodedPolyline", "")
+
+    # ── Coordinates ──────────────────────────────────────────────────────────
+    origin_latlng = first.get("startLocation", {}).get("latLng", {})
+    dest_latlng   = last_leg.get("endLocation", {}).get("latLng", {})
+
+    origin_lat = origin_latlng.get("latitude", 0)
+    origin_lng = origin_latlng.get("longitude", 0)
+    dest_lat   = dest_latlng.get("latitude", 0)
+    dest_lng   = dest_latlng.get("longitude", 0)
+
+    # Waypoints = start of each leg after the first
+    waypoints = [
+        leg.get("startLocation", {}).get("latLng", {})
+        for leg in legs[1:]
+    ]
+
+    # ── Steps ────────────────────────────────────────────────────────────────
+    raw_steps = first.get("steps", [])
+    steps = []
+    for s in raw_steps:
+        nav = s.get("navigationInstruction", {})
+        steps.append({
+            "instruction": nav.get("instructions", "Continue"),
+            "distance_m":  s.get("distanceMeters", 0),
+            "maneuver":    nav.get("maneuver", ""),
+        })
+
+    # ── Build HTML ────────────────────────────────────────────────────────────
+    map_html = _build_map_html(
+        encoded_polyline=encoded_polyline,
+        start_address=start_address,
+        end_address=end_address,
+        origin_lat=origin_lat,
+        origin_lng=origin_lng,
+        dest_lat=dest_lat,
+        dest_lng=dest_lng,
+        waypoints=waypoints,
+        steps=steps,
+        distance_km=dist_km,
+        duration_min=dur_min,
+        detail_level=detail_level,
+    )
+
+    # ── Prefab layout: header cards + full-height map ─────────────────────────
+    with Column(gap=0) as view:
+        # The CustomHTML fills the container — Prefab passes it as a sandboxed iframe
+        CustomHTML(
+            html=map_html,
+            height=520,              # px — adjust to taste
+            resource_domains=[
+                "unpkg.com",
+                "basemaps.cartocdn.com",
+            ],
+        )
+
+    return PrefabApp(view=view)
+
 
 # ─── Prompts ─────────────────────────────────────────────────────────────────
-##this one needs to go, not really doing anything.
+
 @mcp.prompt()
 def navigation_prompt(
     start: str,
@@ -169,36 +586,42 @@ def navigation_prompt(
     Generate a navigation prompt for Trafficly.
 
     Args:
-        start: The starting address or location name.
-        end: The destination address or location name.
-        detail_level: 'summary' for high-level overview or 'detailed' for turn-by-turn.
-        departure_time: Desired departure time e.g. 'now' or '2:30PM'.
-        stops: Comma-separated intermediate stops e.g. 'TBS Lagos, Union Bank Marina'.
+        start: Starting address or location name.
+        end: Destination address or location name.
+        detail_level: 'summary' or 'detailed'.
+        departure_time: e.g. 'now' or '2:30PM'.
+        stops: Comma-separated intermediate stops.
     """
     stops_list = [s.strip() for s in stops.split(",") if s.strip()] if stops else []
     stops_text = f" with stops at {', '.join(stops_list)}" if stops_list else ""
     stops_arg  = json.dumps(stops_list)
 
     prompt_text = f"""
-        You are a navigation assistant called Trafficly.
+You are a navigation assistant called Trafficly.
 
-        The user wants to travel from '{start}' to '{end}'{stops_text}, departing at {departure_time}.
+The user wants to travel from '{start}' to '{end}'{stops_text}, departing at {departure_time}.
 
-        ## Step 1 — Fetch the route
-        Call the get_route_info tool with EXACTLY these arguments:
-        - start_address: "{start}"
-        - end_address: "{end}"
-        - intermediate_stops: {stops_arg}
-        - departure_time: "{departure_time}"
-        - detail_level: "{detail_level}"
+## Step 1 — Fetch the route
+Call get_route_info with EXACTLY these arguments:
+- start_address: "{start}"
+- end_address: "{end}"
+- intermediate_stops: {stops_arg}
+- departure_time: "{departure_time}"
+- detail_level: "{detail_level}"
 
-        Do NOT proceed until you have the tool response.
+Do NOT proceed until you have the tool response.
 
-        ## Step 2 — Use ONLY the tool data
-        - Never infer, guess, or recall road names from memory.
-        - Every road name, distance, and duration must come directly from the tool response.
+## Step 2 — Display the map
+Immediately call show_route_map with:
+- start_address: "{start}"
+- end_address: "{end}"
+- route_data: <the route_data field from step 1>
+- detail_level: "{detail_level}"
 
-        ## Step 3 — Present the route info while adharing to the additional instructions provided.
-        """.strip()
+## Step 3 — Describe the route
+Use ONLY data from the tool response. Never guess road names.
+Follow the guidance_prompt field from get_route_info for formatting style.
+""".strip()
+
     logger.info(f"[PROMPT] navigation_prompt | {start} → {end} stops={stops_list}")
     return prompt_text

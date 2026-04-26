@@ -308,14 +308,17 @@ class Map_client():
                     "X-Goog-FieldMask": (
                         "routes.duration,"
                         "routes.distanceMeters,"
+                        "routes.polyline.encodedPolyline,"
                         "routes.legs.duration,"
                         "routes.legs.distanceMeters,"
                         "routes.legs.startLocation,"
                         "routes.legs.endLocation,"
                         "routes.legs.steps.navigationInstruction,"
                         "routes.legs.steps.distanceMeters,"
+                        "routes.legs.steps.startLocation,"
+                        "routes.legs.steps.endLocation,"
                         "routes.legs.steps.localizedValues"
-                            )
+                    ),
                     }
         response = await self.client.post(self.route_base_url, headers=headers, json=body)
         if response.status_code == 200:
