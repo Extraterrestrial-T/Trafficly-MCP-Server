@@ -13,6 +13,8 @@ from fastmcp import FastMCP
 from fastmcp.dependencies import CurrentContext
 from fastmcp.server.context import Context
 from fastmcp.server.auth.providers.clerk import ClerkProvider
+from fastmcp.apps import AppConfig, ResourceCSP
+from fastmcp.tools import ToolResult
 from key_value.aio.stores.redis import RedisStore
 from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 from key_value.aio.wrappers.prefix_collections import PrefixCollectionsWrapper
@@ -21,13 +23,6 @@ import redis.asyncio as aioredis
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 import hashlib
-
-# ── Prefab imports ────────────────────────────────────────────────────────────
-from prefab_ui.app import PrefabApp
-from prefab_ui.components import (
-    Column, Row, Grid, Heading, Text, Muted, Badge,
-    Card, CardContent, Separator, CustomHTML,
-)
 
 load_dotenv()
 
@@ -98,6 +93,9 @@ app.mount("/", mcp_app)
 
 
 # ─── Map HTML builder ─────────────────────────────────────────────────────────
+# This is a module-level cache — the HTML is built once per show_route_map call
+# and stored here so the resource endpoint can serve it.
+_map_html_cache: str = ""
 
 def _build_map_html(
     encoded_polyline: str,
@@ -107,26 +105,17 @@ def _build_map_html(
     origin_lng: float,
     dest_lat: float,
     dest_lng: float,
-    waypoints: list,           # list of {"latitude": ..., "longitude": ...}
-    steps: list,               # list of {"instruction": str, "distance_m": int, "maneuver": str}
+    waypoints: list,
+    steps: list,
     distance_km: float,
     duration_min: int,
     detail_level: str,
 ) -> str:
-    """
-    Build a self-contained HTML string with:
-    - Leaflet.js map rendering the actual road polyline
-    - Google polyline decoder (pure JS, no extra deps)
-    - Numbered markers for origin, waypoints, destination
-    - Side panel with step list
-    Works in any iframe / CustomHTML host.
-    """
     waypoints_js = json.dumps(waypoints)
     steps_js     = json.dumps(steps)
     detail_js    = json.dumps(detail_level)
 
-    return f"""
-<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -144,8 +133,6 @@ def _build_map_html(
     flex-direction: column;
     overflow: hidden;
   }}
-
-  /* ── Header ── */
   .header {{
     display: flex;
     align-items: center;
@@ -161,21 +148,8 @@ def _build_map_html(
   .stat {{ text-align:center; }}
   .stat-value {{ font-size: 15px; font-weight: 700; color: #f1f5f9; }}
   .stat-label {{ font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }}
-
-  /* ── Main body ── */
-  .body {{
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }}
-
-  /* ── Map ── */
-  #map {{
-    flex: 1;
-    min-width: 0;
-  }}
-
-  /* ── Steps panel ── */
+  .body {{ display: flex; flex: 1; overflow: hidden; }}
+  #map {{ flex: 1; min-width: 0; }}
   .steps-panel {{
     width: 280px;
     flex-shrink: 0;
@@ -195,62 +169,33 @@ def _build_map_html(
     border-bottom: 1px solid #2d3148;
     flex-shrink: 0;
   }}
-  .steps-list {{
-    overflow-y: auto;
-    flex: 1;
-    padding: 8px 0;
-  }}
+  .steps-list {{ overflow-y: auto; flex: 1; padding: 8px 0; }}
   .steps-list::-webkit-scrollbar {{ width: 4px; }}
   .steps-list::-webkit-scrollbar-track {{ background: transparent; }}
   .steps-list::-webkit-scrollbar-thumb {{ background: #2d3148; border-radius: 2px; }}
-
   .step {{
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    padding: 10px 14px;
-    border-bottom: 1px solid #1e2235;
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 14px; border-bottom: 1px solid #1e2235;
     transition: background 0.15s;
   }}
   .step:hover {{ background: #202336; }}
   .step-num {{
-    min-width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #2d3148;
-    color: #94a3b8;
-    font-size: 10px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-top: 1px;
+    min-width: 22px; height: 22px; border-radius: 50%;
+    background: #2d3148; color: #94a3b8; font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
   }}
-  .step-num.origin  {{ background: #1d4ed8; color: #fff; }}
-  .step-num.dest    {{ background: #dc2626; color: #fff; }}
+  .step-num.origin {{ background: #1d4ed8; color: #fff; }}
+  .step-num.dest   {{ background: #dc2626; color: #fff; }}
   .step-body {{ flex:1; min-width:0; }}
-  .step-instruction {{
-    font-size: 12.5px;
-    color: #cbd5e1;
-    line-height: 1.4;
-    word-break: break-word;
-  }}
-  .step-dist {{
-    font-size: 11px;
-    color: #475569;
-    margin-top: 3px;
-  }}
-
-  /* Leaflet dark tile override */
+  .step-instruction {{ font-size: 12.5px; color: #cbd5e1; line-height: 1.4; word-break: break-word; }}
+  .step-dist {{ font-size: 11px; color: #475569; margin-top: 3px; }}
   .leaflet-tile-pane {{ filter: brightness(0.85) saturate(0.8); }}
   .leaflet-control-attribution {{ font-size: 9px !important; background: rgba(0,0,0,0.5) !important; color: #64748b !important; }}
   .leaflet-control-attribution a {{ color: #475569 !important; }}
 </style>
 </head>
 <body>
-
-<!-- Header -->
 <div class="header">
   <span class="logo">⚡ Trafficly</span>
   <span class="route-label">{start_address} → {end_address}</span>
@@ -265,8 +210,6 @@ def _build_map_html(
     </div>
   </div>
 </div>
-
-<!-- Body -->
 <div class="body">
   <div id="map"></div>
   <div class="steps-panel">
@@ -274,18 +217,19 @@ def _build_map_html(
     <div class="steps-list" id="steps-list"></div>
   </div>
 </div>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-// ── Data from Python ──────────────────────────────────────────────────────────
-const ENCODED_POLYLINE = {json.dumps(encoded_polyline)};
-const ORIGIN  = {{ lat: {origin_lat}, lng: {origin_lng} }};
-const DEST    = {{ lat: {dest_lat},   lng: {dest_lng}   }};
-const WAYPOINTS  = {waypoints_js};
-const STEPS      = {steps_js};
-const DETAIL     = {detail_js};
+<script type="module">
+import {{ App }} from "https://unpkg.com/@modelcontextprotocol/ext-apps@0.4.0/app-with-deps";
 
-// ── Google polyline decoder ───────────────────────────────────────────────────
+const mcpApp = new App({{ name: "Trafficly Map", version: "1.0.0" }});
+
+const ENCODED_POLYLINE = {json.dumps(encoded_polyline)};
+const ORIGIN    = {{ lat: {origin_lat}, lng: {origin_lng} }};
+const DEST      = {{ lat: {dest_lat},   lng: {dest_lng}   }};
+const WAYPOINTS = {waypoints_js};
+const STEPS     = {steps_js};
+const DETAIL    = {detail_js};
+
 function decodePolyline(encoded) {{
   const points = [];
   let index = 0, lat = 0, lng = 0;
@@ -301,115 +245,79 @@ function decodePolyline(encoded) {{
   return points;
 }}
 
-// ── Map init ──────────────────────────────────────────────────────────────────
 const map = L.map('map', {{ zoomControl: true, attributionControl: true }});
-
 L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
   attribution: '© <a href="https://carto.com/">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 19,
+  subdomains: 'abcd', maxZoom: 19,
 }}).addTo(map);
 
-// ── Draw polyline ─────────────────────────────────────────────────────────────
 let routeLine;
 if (ENCODED_POLYLINE) {{
   const coords = decodePolyline(ENCODED_POLYLINE);
-  routeLine = L.polyline(coords, {{
-    color: '#3b82f6',
-    weight: 5,
-    opacity: 0.9,
-    lineCap: 'round',
-    lineJoin: 'round',
-  }}).addTo(map);
+  routeLine = L.polyline(coords, {{ color: '#3b82f6', weight: 5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }}).addTo(map);
   map.fitBounds(routeLine.getBounds(), {{ padding: [32, 32] }});
 }} else {{
-  // Fallback: straight line if no polyline
   const coords = [ORIGIN, ...WAYPOINTS.map(w => ({{lat: w.latitude, lng: w.longitude}})), DEST];
-  routeLine = L.polyline(coords.map(c => [c.lat, c.lng]), {{
-    color: '#3b82f6', weight: 4, opacity: 0.8, dashArray: '8 6',
-  }}).addTo(map);
+  routeLine = L.polyline(coords.map(c => [c.lat, c.lng]), {{ color: '#3b82f6', weight: 4, opacity: 0.8, dashArray: '8 6' }}).addTo(map);
   map.fitBounds(routeLine.getBounds(), {{ padding: [32, 32] }});
 }}
 
-// ── Custom marker factory ─────────────────────────────────────────────────────
 function makeMarker(label, bgColor) {{
   return L.divIcon({{
     className: '',
-    html: `<div style="
-      width:28px;height:28px;border-radius:50%;
-      background:${{bgColor}};color:#fff;
-      font-size:11px;font-weight:700;
-      display:flex;align-items:center;justify-content:center;
-      border:2px solid rgba(255,255,255,0.3);
-      box-shadow:0 2px 8px rgba(0,0,0,0.5);
-    ">${{label}}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    html: `<div style="width:28px;height:28px;border-radius:50%;background:${{bgColor}};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.3);box-shadow:0 2px 8px rgba(0,0,0,0.5);">${{label}}</div>`,
+    iconSize: [28, 28], iconAnchor: [14, 14],
   }});
 }}
 
-// Origin marker
-L.marker([ORIGIN.lat, ORIGIN.lng], {{ icon: makeMarker('A', '#1d4ed8') }})
-  .addTo(map)
-  .bindPopup(`<b>Start</b><br/>{start_address}`);
-
-// Waypoint markers
+L.marker([ORIGIN.lat, ORIGIN.lng], {{ icon: makeMarker('A', '#1d4ed8') }}).addTo(map).bindPopup(`<b>Start</b><br/>{start_address}`);
 WAYPOINTS.forEach((wp, i) => {{
-  L.marker([wp.latitude, wp.longitude], {{ icon: makeMarker(i + 2, '#7c3aed') }})
-    .addTo(map)
-    .bindPopup(`<b>Stop ${{i + 2}}</b>`);
+  L.marker([wp.latitude, wp.longitude], {{ icon: makeMarker(i + 2, '#7c3aed') }}).addTo(map).bindPopup(`<b>Stop ${{i + 2}}</b>`);
 }});
+L.marker([DEST.lat, DEST.lng], {{ icon: makeMarker('B', '#dc2626') }}).addTo(map).bindPopup(`<b>Destination</b><br/>{end_address}`);
 
-// Destination marker
-L.marker([DEST.lat, DEST.lng], {{ icon: makeMarker('B', '#dc2626') }})
-  .addTo(map)
-  .bindPopup(`<b>Destination</b><br/>{end_address}`);
-
-// ── Steps panel ───────────────────────────────────────────────────────────────
 const panel = document.getElementById('steps-list');
-
-// Filter steps for summary mode: keep meaningful maneuvers only
 const displaySteps = DETAIL === 'detailed'
   ? STEPS
   : STEPS.filter(s => s.maneuver && !['DEPART','ARRIVE',''].includes(s.maneuver)).slice(0, 8);
 
-// Origin row
-panel.innerHTML += `
-  <div class="step">
-    <div class="step-num origin">A</div>
-    <div class="step-body">
-      <div class="step-instruction">{start_address}</div>
-      <div class="step-dist">Start</div>
-    </div>
-  </div>`;
+panel.innerHTML += `<div class="step"><div class="step-num origin">A</div><div class="step-body"><div class="step-instruction">{start_address}</div><div class="step-dist">Start</div></div></div>`;
 
 displaySteps.forEach((step, i) => {{
-  const distText = step.distance_m > 1000
-    ? (step.distance_m / 1000).toFixed(1) + ' km'
-    : step.distance_m + ' m';
-  panel.innerHTML += `
-    <div class="step">
-      <div class="step-num">${{i + 1}}</div>
-      <div class="step-body">
-        <div class="step-instruction">${{step.instruction}}</div>
-        <div class="step-dist">${{distText}}</div>
-      </div>
-    </div>`;
+  const distText = step.distance_m > 1000 ? (step.distance_m / 1000).toFixed(1) + ' km' : step.distance_m + ' m';
+  panel.innerHTML += `<div class="step"><div class="step-num">${{i + 1}}</div><div class="step-body"><div class="step-instruction">${{step.instruction}}</div><div class="step-dist">${{distText}}</div></div></div>`;
 }});
 
-// Destination row
-panel.innerHTML += `
-  <div class="step">
-    <div class="step-num dest">B</div>
-    <div class="step-body">
-      <div class="step-instruction">{end_address}</div>
-      <div class="step-dist">Destination</div>
-    </div>
-  </div>`;
+panel.innerHTML += `<div class="step"><div class="step-num dest">B</div><div class="step-body"><div class="step-instruction">{end_address}</div><div class="step-dist">Destination</div></div></div>`;
+
+await mcpApp.connect();
 </script>
 </body>
-</html>
-"""
+</html>"""
+
+
+# ─── UI resource — serves the map HTML ───────────────────────────────────────
+
+VIEW_URI = "ui://trafficly/map.html"
+
+@mcp.resource(
+    VIEW_URI,
+    app=AppConfig(
+        csp=ResourceCSP(
+            resource_domains=[
+                "https://unpkg.com",
+                "https://basemaps.cartocdn.com",
+                "https://a.basemaps.cartocdn.com",
+                "https://b.basemaps.cartocdn.com",
+                "https://c.basemaps.cartocdn.com",
+                "https://d.basemaps.cartocdn.com",
+            ],
+        )
+    ),
+)
+def map_view() -> str:
+    """Serves the current route map HTML."""
+    return _map_html_cache
 
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
@@ -463,7 +371,6 @@ async def get_route_info(
             stops=stops,
             departure_time=departure_time,
         )
-        # route_data already includes polyline via updated map_service FieldMask
         await upstash_redis.cache_store.set(key, json.dumps(route_data), ex=3600)
         logger.info(f"[TOOL] get_route_info success | routes={len(route_data.get('routes', []))}")
 
@@ -481,13 +388,13 @@ async def get_route_info(
     }
 
 
-@mcp.tool(app=True)
+@mcp.tool(app=AppConfig(resource_uri=VIEW_URI))
 def show_route_map(
     start_address: str,
     end_address: str,
     route_data: dict,
     detail_level: str = "summary",
-) -> PrefabApp:
+) -> str:
     """
     Display an interactive Leaflet map with the route drawn along actual roads.
     Call this immediately after get_route_info using its route_data output.
@@ -496,15 +403,16 @@ def show_route_map(
         start_address: Starting location label
         end_address: Destination label
         route_data: The route_data dict returned by get_route_info
-        detail_level: "summary" or "detailed" — controls step panel verbosity
+        detail_level: "summary" or "detailed"
     """
+    global _map_html_cache
+
     routes   = route_data.get("routes", [{}])
     best     = routes[0] if routes else {}
     legs     = best.get("legs", [{}])
     first    = legs[0] if legs else {}
     last_leg = legs[-1] if legs else {}
 
-    # ── Distance & duration ───────────────────────────────────────────────────
     dist_m   = best.get("distanceMeters", 0)
     dist_km  = round(dist_m / 1000, 1) if dist_m else 0
 
@@ -512,25 +420,20 @@ def show_route_map(
     dur_sec  = int(dur_raw.replace("s", "") or 0) if isinstance(dur_raw, str) else int(dur_raw)
     dur_min  = max(1, round(dur_sec / 60))
 
-    # ── Polyline ─────────────────────────────────────────────────────────────
     encoded_polyline = best.get("polyline", {}).get("encodedPolyline", "")
 
-    # ── Coordinates ──────────────────────────────────────────────────────────
     origin_latlng = first.get("startLocation", {}).get("latLng", {})
     dest_latlng   = last_leg.get("endLocation", {}).get("latLng", {})
-
     origin_lat = origin_latlng.get("latitude", 0)
     origin_lng = origin_latlng.get("longitude", 0)
     dest_lat   = dest_latlng.get("latitude", 0)
     dest_lng   = dest_latlng.get("longitude", 0)
 
-    # Waypoints = start of each leg after the first
     waypoints = [
         leg.get("startLocation", {}).get("latLng", {})
         for leg in legs[1:]
     ]
 
-    # ── Steps ────────────────────────────────────────────────────────────────
     raw_steps = first.get("steps", [])
     steps = []
     for s in raw_steps:
@@ -541,8 +444,8 @@ def show_route_map(
             "maneuver":    nav.get("maneuver", ""),
         })
 
-    # ── Build HTML ────────────────────────────────────────────────────────────
-    map_html = _build_map_html(
+    # Build the HTML and cache it so the resource endpoint can serve it
+    _map_html_cache = _build_map_html(
         encoded_polyline=encoded_polyline,
         start_address=start_address,
         end_address=end_address,
@@ -557,19 +460,7 @@ def show_route_map(
         detail_level=detail_level,
     )
 
-    # ── Prefab layout: header cards + full-height map ─────────────────────────
-    with Column(gap=0) as view:
-        # The CustomHTML fills the container — Prefab passes it as a sandboxed iframe
-        CustomHTML(
-            html=map_html,
-            height=520,              # px — adjust to taste
-            resource_domains=[
-                "unpkg.com",
-                "basemaps.cartocdn.com",
-            ],
-        )
-
-    return PrefabApp(view=view)
+    return f"Route map ready: {start_address} → {end_address} ({dist_km} km, {dur_min} min)"
 
 
 # ─── Prompts ─────────────────────────────────────────────────────────────────
