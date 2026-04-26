@@ -55,6 +55,7 @@ packaging==26.1
 pathable==0.5.0
 pipreqs==0.4.13
 platformdirs==4.9.6
+prefab-ui==0.19.1
 py-key-value-aio==0.4.4
 pyasn1==0.6.3
 pycparser==3.0
@@ -69,7 +70,7 @@ python-dotenv==1.2.2
 python-jose==3.5.0
 python-multipart==0.0.26
 pywin32==311;  platform_system == "Windows"
-pywin32-ctypes==0.2.3;  platform_system == "Windows"
+pywin32-ctypes==0.2.3;  platform_system == "Windows"; 
 PyYAML==6.0.3
 redis==7.4.0
 referencing==0.37.0
