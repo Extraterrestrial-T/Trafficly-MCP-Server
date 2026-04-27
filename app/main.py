@@ -469,8 +469,8 @@ async def get_route_info(
         ),
     }
 
-
-@mcp.tool(app=AppConfig(resource_uri=VIEW_URI))
+#app=AppConfig(resource_uri=VIEW_URI)
+@mcp.tool()
 async def show_route_map(
     start_address: str,
     end_address: str,
