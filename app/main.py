@@ -228,9 +228,49 @@ def map_view() -> str:
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script type="module">
-import { App } from "https://unpkg.com/@modelcontextprotocol/ext-apps@0.4.0/app-with-deps";
-console.log("Script is running!");
+<script>
+// ── Inline MCP Apps bridge ────────────────────────────────────────────────────
+// Implements the ui/* JSON-RPC 2.0 postMessage protocol from the MCP Apps spec.
+// No CDN import needed — ESM imports from external origins are blocked by
+// the iframe sandbox CSP in ChatGPT and other strict hosts.
+(function() {
+  var _pending = {}, _id = 0;
+
+  function send(method, params) {
+    return new Promise(function(resolve) {
+      var id = ++_id;
+      _pending[id] = resolve;
+      window.parent.postMessage({ jsonrpc: "2.0", id: id, method: method, params: params || {} }, "*");
+    });
+  }
+
+  window.addEventListener("message", function(e) {
+    var msg = e.data;
+    if (!msg || msg.jsonrpc !== "2.0") return;
+
+    // Resolve pending request
+    if (msg.id && _pending[msg.id]) {
+      _pending[msg.id](msg.result);
+      delete _pending[msg.id];
+    }
+
+    // Host pushes tool result into iframe
+    if (msg.method === "ui/notifications/tool-result") {
+      if (typeof window.__ontoolresult === "function") {
+        window.__ontoolresult(msg.params);
+      }
+    }
+
+    // Host initialises the iframe — respond to complete handshake
+    if (msg.method === "ui/initialize") {
+      send("ui/initialize", {});
+    }
+  });
+
+  // Announce readiness to the host
+  send("ui/initialize", {});
+})();
+console.log("Trafficly bridge ready");
 // Google encoded polyline decoder
 function decodePolyline(encoded) {
   const pts = [];
@@ -344,12 +384,12 @@ function renderMap(data) {
     </div>`;
 }
 
-// Connect to the MCP Apps host bridge.
-// ontoolresult fires when the host pushes the show_route_map result into the iframe.
-const mcpApp = new App({ name: "Trafficly", version: "1.0.0" });
-
-mcpApp.ontoolresult = ({ content }) => {
-  const textBlock = content?.find(c => c.type === 'text');
+// Register tool result handler — called by the inline bridge above
+// when the host pushes the show_route_map result into the iframe.
+window.__ontoolresult = function(params) {
+  var content = params && params.content;
+  if (!content) return;
+  var textBlock = content.find(function(c) { return c.type === 'text'; });
   if (!textBlock) return;
   try {
     renderMap(JSON.parse(textBlock.text));
@@ -357,8 +397,6 @@ mcpApp.ontoolresult = ({ content }) => {
     console.error('Trafficly: failed to parse tool result', e);
   }
 };
-
-await mcpApp.connect();
 </script>
 </body>
 </html>"""
