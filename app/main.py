@@ -95,21 +95,21 @@ VIEW_URI = "ui://trafficly/map"
 # Data flows in via the MCP Apps postMessage bridge (ontoolresult).
 # No f-string injection. Works on Claude, ChatGPT, and any MCP Apps host.
 
-@mcp.resource(
-    VIEW_URI,
-    app=AppConfig(
-        csp=ResourceCSP(
-            resource_domains=[
-                "https://unpkg.com",
-                "https://a.basemaps.cartocdn.com",
-                "https://b.basemaps.cartocdn.com",
-                "https://c.basemaps.cartocdn.com",
-                "https://d.basemaps.cartocdn.com",
-                "https://basemaps.cartocdn.com",
-            ],
-        )
-    ),
-)
+# @mcp.resource(
+#     VIEW_URI,
+#     app=AppConfig(
+#         csp=ResourceCSP(
+#             resource_domains=[
+#                 "https://unpkg.com",
+#                 "https://a.basemaps.cartocdn.com",
+#                 "https://b.basemaps.cartocdn.com",
+#                 "https://c.basemaps.cartocdn.com",
+#                 "https://d.basemaps.cartocdn.com",
+#                 "https://basemaps.cartocdn.com",
+#             ],
+#         )
+#     ),
+# )
 def map_view() -> str:
     return r"""<!DOCTYPE html>
 <html>
@@ -476,7 +476,7 @@ async def show_route_map(
     end_address: str,
     route_id: str,
     detail_level: str = "summary",
-) -> ToolResult:
+) -> types.CallToolResult:
     """
     Display an interactive map with the route drawn along actual roads.
     Call this immediately after get_route_info using its route_id.
@@ -543,9 +543,26 @@ async def show_route_map(
         "detail_level":     detail_level,
     }
 
-    return ToolResult(content=[
-        types.TextContent(type="text", text=json.dumps(payload))
-    ])
+    return types.CallToolResult(
+        content=[
+            types.TextContent(type="text", text=json.dumps(payload))
+        ],
+        meta={
+            "ui": {
+                "html": map_view(), # <--- Inject raw HTML directly
+                "csp": {
+                    "resource_domains": [
+                        "https://unpkg.com",
+                        "https://a.basemaps.cartocdn.com",
+                        "https://b.basemaps.cartocdn.com",
+                        "https://c.basemaps.cartocdn.com",
+                        "https://d.basemaps.cartocdn.com",
+                        "https://basemaps.cartocdn.com"
+                    ]
+                }
+            }
+        }
+    )
 
 
 # ─── Prompts ─────────────────────────────────────────────────────────────────
