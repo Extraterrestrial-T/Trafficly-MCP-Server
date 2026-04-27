@@ -220,7 +220,7 @@ def map_view() -> str:
 </div>
 
 <div class="body" id="body" style="display:none">
-  <div id="map"></div>
+  <div id="map" style="height: 600px;"></div>></div>
   <div class="steps-panel">
     <div class="steps-header">Directions</div>
     <div class="steps-list" id="steps-list"></div>
@@ -230,7 +230,7 @@ def map_view() -> str:
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { App } from "https://unpkg.com/@modelcontextprotocol/ext-apps@0.4.0/app-with-deps";
-
+console.log("Script is running!");
 // Google encoded polyline decoder
 function decodePolyline(encoded) {
   const pts = [];
