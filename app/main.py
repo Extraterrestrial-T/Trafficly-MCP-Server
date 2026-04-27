@@ -220,7 +220,7 @@ def map_view() -> str:
 </div>
 
 <div class="body" id="body" style="display:none">
-  <div id="map" style="height: 600px;"></div>></div>
+  <div id="map" style="height: 500px;">Hello map </div>
   <div class="steps-panel">
     <div class="steps-header">Directions</div>
     <div class="steps-list" id="steps-list"></div>
