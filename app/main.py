@@ -95,311 +95,126 @@ VIEW_URI = "ui://trafficly/map"
 # Data flows in via the MCP Apps postMessage bridge (ontoolresult).
 # No f-string injection. Works on Claude, ChatGPT, and any MCP Apps host.
 
-# @mcp.resource(
-#     VIEW_URI,
-#     app=AppConfig(
-#         csp=ResourceCSP(
-#             resource_domains=[
-#                 "https://unpkg.com",
-#                 "https://a.basemaps.cartocdn.com",
-#                 "https://b.basemaps.cartocdn.com",
-#                 "https://c.basemaps.cartocdn.com",
-#                 "https://d.basemaps.cartocdn.com",
-#                 "https://basemaps.cartocdn.com",
-#             ],
-#         )
-#     ),
-# )
+@mcp.resource(
+    VIEW_URI,
+    app=AppConfig(
+        csp=ResourceCSP(
+            resource_domains=[
+                "https://unpkg.com",
+                "https://a.basemaps.cartocdn.com",
+                "https://b.basemaps.cartocdn.com",
+                "https://c.basemaps.cartocdn.com",
+                "https://d.basemaps.cartocdn.com",
+                "https://basemaps.cartocdn.com",
+            ],
+        )
+    ),
+)
 def map_view() -> str:
     return r"""<!DOCTYPE html>
 <html>
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Trafficly</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    font-family: 'Segoe UI', sans-serif;
-    background: #0f1117;
-    color: #e2e8f0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: #1a1d2e;
-    border-bottom: 1px solid #2d3148;
-    flex-shrink: 0;
-  }
-  .logo { font-size: 17px; font-weight: 700; color: #60a5fa; }
-  .route-label {
-    font-size: 13px; color: #94a3b8; flex:1;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .stats { display: flex; gap: 16px; flex-shrink: 0; }
-  .stat { text-align: center; }
-  .stat-value { font-size: 15px; font-weight: 700; color: #f1f5f9; }
-  .stat-label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-  .body { display: flex; flex: 1; overflow: hidden; }
-  #map { flex: 1; min-width: 0; }
-  .steps-panel {
-    width: 270px; flex-shrink: 0;
-    background: #1a1d2e; border-left: 1px solid #2d3148;
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-  .steps-header {
-    padding: 12px 14px; font-size: 11px; font-weight: 600;
-    color: #64748b; text-transform: uppercase; letter-spacing: 0.8px;
-    border-bottom: 1px solid #2d3148; flex-shrink: 0;
-  }
-  .steps-list { overflow-y: auto; flex: 1; padding: 8px 0; }
-  .steps-list::-webkit-scrollbar { width: 4px; }
-  .steps-list::-webkit-scrollbar-thumb { background: #2d3148; border-radius: 2px; }
-  .step {
-    display: flex; gap: 10px; align-items: flex-start;
-    padding: 10px 14px; border-bottom: 1px solid #1e2235;
-  }
-  .step:hover { background: #202336; }
-  .step-num {
-    min-width: 22px; height: 22px; border-radius: 50%;
-    background: #2d3148; color: #94a3b8;
-    font-size: 10px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; margin-top: 1px;
-  }
-  .step-num.origin { background: #1d4ed8; color: #fff; }
-  .step-num.dest   { background: #dc2626; color: #fff; }
-  .step-body { flex: 1; min-width: 0; }
-  .step-instruction { font-size: 12.5px; color: #cbd5e1; line-height: 1.4; word-break: break-word; }
-  .step-dist { font-size: 11px; color: #475569; margin-top: 3px; }
-  .loading {
-    position: absolute; inset: 0; display: flex; align-items: center;
-    justify-content: center; background: #0f1117; color: #64748b;
-    font-size: 14px; z-index: 9999; flex-direction: column; gap: 12px;
-  }
-  .spinner {
-    width: 32px; height: 32px; border: 3px solid #2d3148;
-    border-top-color: #60a5fa; border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .leaflet-tile-pane { filter: brightness(0.85) saturate(0.8); }
-  .leaflet-control-attribution {
-    font-size: 9px !important;
-    background: rgba(0,0,0,0.5) !important;
-  }
-</style>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+    <title>Trafficly Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body, html { height: 100%; width: 100%; background: #0f1117; color: #e2e8f0; font-family: sans-serif; overflow: hidden; }
+        #app-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+        #header { height: 50px; background: #1a1d2e; display: none; align-items: center; padding: 0 15px; border-bottom: 1px solid #2d3148; justify-content: space-between; }
+        #map { flex: 1; width: 100%; background: #111; }
+        .loading-overlay { position: absolute; inset: 0; background: #0f1117; display: flex; align-items: center; justify-content: center; z-index: 1000; flex-direction: column; gap: 10px; }
+        .spinner { width: 30px; height: 30px; border: 3px solid #2d3148; border-top-color: #60a5fa; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .stat-text { font-size: 12px; font-weight: bold; }
+    </style>
 </head>
 <body>
-
-<div class="loading" id="loading">
-  <div class="spinner"></div>
-  <span>Loading route...</span>
-</div>
-
-<div class="header" id="header" style="display:none">
-  <span class="logo">⚡ Trafficly</span>
-  <span class="route-label" id="route-label"></span>
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-value" id="stat-dist">—</div>
-      <div class="stat-label">Distance</div>
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+        <div style="color: #64748b; font-size: 12px;">Initializing Map...</div>
     </div>
-    <div class="stat">
-      <div class="stat-value" id="stat-dur">—</div>
-      <div class="stat-label">Est. time</div>
-    </div>
-  </div>
-</div>
 
-<div class="body" id="body" style="display:none">
-  <div id="map" style="height: 500px;">Hello map </div>
-  <div class="steps-panel">
-    <div class="steps-header">Directions</div>
-    <div class="steps-list" id="steps-list"></div>
-  </div>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-// ── Inline MCP Apps bridge ────────────────────────────────────────────────────
-// Implements the ui/* JSON-RPC 2.0 postMessage protocol from the MCP Apps spec.
-// No CDN import needed — ESM imports from external origins are blocked by
-// the iframe sandbox CSP in ChatGPT and other strict hosts.
-(function() {
-  var _pending = {}, _id = 0;
-
-  function send(method, params) {
-    return new Promise(function(resolve) {
-      var id = ++_id;
-      _pending[id] = resolve;
-      window.parent.postMessage({ jsonrpc: "2.0", id: id, method: method, params: params || {} }, "*");
-    });
-  }
-
-  window.addEventListener("message", function(e) {
-    var msg = e.data;
-    if (!msg || msg.jsonrpc !== "2.0") return;
-
-    // Resolve pending request
-    if (msg.id && _pending[msg.id]) {
-      _pending[msg.id](msg.result);
-      delete _pending[msg.id];
-    }
-
-    // Host pushes tool result into iframe
-    if (msg.method === "ui/notifications/tool-result") {
-      if (typeof window.__ontoolresult === "function") {
-        window.__ontoolresult(msg.params);
-      }
-    }
-
-    // Host initialises the iframe — respond to complete handshake
-    if (msg.method === "ui/initialize") {
-      send("ui/initialize", {});
-    }
-  });
-
-  // Announce readiness to the host
-  send("ui/initialize", {});
-})();
-console.log("Trafficly bridge ready");
-// Google encoded polyline decoder
-function decodePolyline(encoded) {
-  const pts = [];
-  let idx = 0, lat = 0, lng = 0;
-  while (idx < encoded.length) {
-    let b, shift = 0, result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lat += (result & 1) ? ~(result >> 1) : result >> 1;
-    shift = 0; result = 0;
-    do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
-    lng += (result & 1) ? ~(result >> 1) : result >> 1;
-    pts.push([lat / 1e5, lng / 1e5]);
-  }
-  return pts;
-}
-
-function makeIcon(label, bg) {
-  return L.divIcon({
-    className: '',
-    html: `<div style="width:28px;height:28px;border-radius:50%;background:${bg};color:#fff;
-           font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
-           border:2px solid rgba(255,255,255,0.25);box-shadow:0 2px 8px rgba(0,0,0,0.5)">${label}</div>`,
-    iconSize: [28, 28], iconAnchor: [14, 14],
-  });
-}
-
-let mapInstance = null;
-
-function renderMap(data) {
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('header').style.display  = 'flex';
-  document.getElementById('body').style.display    = 'flex';
-
-  document.getElementById('route-label').textContent =
-    `${data.start_address} → ${data.end_address}`;
-  document.getElementById('stat-dist').textContent = `${data.distance_km} km`;
-  document.getElementById('stat-dur').textContent  = `${data.duration_min} min`;
-
-  if (mapInstance) { mapInstance.remove(); }
-  mapInstance = L.map('map', { zoomControl: true });
-
-  L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    { attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 19 }
-  ).addTo(mapInstance);
-
-  let routeLine;
-  if (data.encoded_polyline) {
-    const coords = decodePolyline(data.encoded_polyline);
-    routeLine = L.polyline(coords, {
-      color: '#3b82f6', weight: 5, opacity: 0.9,
-      lineCap: 'round', lineJoin: 'round',
-    }).addTo(mapInstance);
-  } else {
-    const pts = [
-      [data.origin_lat, data.origin_lng],
-      ...(data.waypoints || []).map(w => [w.latitude, w.longitude]),
-      [data.dest_lat, data.dest_lng],
-    ];
-    routeLine = L.polyline(pts, { color: '#3b82f6', weight: 4, opacity: 0.8 }).addTo(mapInstance);
-  }
-  mapInstance.fitBounds(routeLine.getBounds(), { padding: [32, 32] });
-
-  L.marker([data.origin_lat, data.origin_lng], { icon: makeIcon('A', '#1d4ed8') })
-    .addTo(mapInstance).bindPopup(`<b>Start</b><br>${data.start_address}`);
-
-  (data.waypoints || []).forEach((wp, i) => {
-    L.marker([wp.latitude, wp.longitude], { icon: makeIcon(i + 2, '#7c3aed') })
-      .addTo(mapInstance).bindPopup(`<b>Stop ${i + 2}</b>`);
-  });
-
-  L.marker([data.dest_lat, data.dest_lng], { icon: makeIcon('B', '#dc2626') })
-    .addTo(mapInstance).bindPopup(`<b>Destination</b><br>${data.end_address}`);
-
-  const panel  = document.getElementById('steps-list');
-  const allSteps = data.steps || [];
-  const displaySteps = data.detail_level === 'detailed'
-    ? allSteps
-    : allSteps.filter(s => s.maneuver && !['DEPART','ARRIVE',''].includes(s.maneuver)).slice(0, 8);
-
-  panel.innerHTML = `
-    <div class="step">
-      <div class="step-num origin">A</div>
-      <div class="step-body">
-        <div class="step-instruction">${data.start_address}</div>
-        <div class="step-dist">Start</div>
-      </div>
-    </div>`;
-
-  displaySteps.forEach((step, i) => {
-    const d = step.distance_m > 1000
-      ? (step.distance_m / 1000).toFixed(1) + ' km'
-      : step.distance_m + ' m';
-    panel.innerHTML += `
-      <div class="step">
-        <div class="step-num">${i + 1}</div>
-        <div class="step-body">
-          <div class="step-instruction">${step.instruction}</div>
-          <div class="step-dist">${d}</div>
+    <div id="app-container">
+        <div id="header">
+            <span style="color: #60a5fa; font-weight: bold;">⚡ Trafficly</span>
+            <div id="stats" class="stat-text"></div>
         </div>
-      </div>`;
-  });
+        <div id="map"></div>
+    </div>
 
-  panel.innerHTML += `
-    <div class="step">
-      <div class="step-num dest">B</div>
-      <div class="step-body">
-        <div class="step-instruction">${data.end_address}</div>
-        <div class="step-dist">Destination</div>
-      </div>
-    </div>`;
-}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let mapInstance = null;
 
-// Register tool result handler — called by the inline bridge above
-// when the host pushes the show_route_map result into the iframe.
-window.__ontoolresult = function(params) {
-  var content = params && params.content;
-  if (!content) return;
-  var textBlock = content.find(function(c) { return c.type === 'text'; });
-  if (!textBlock) return;
-  try {
-    renderMap(JSON.parse(textBlock.text));
-  } catch (e) {
-    console.error('Trafficly: failed to parse tool result', e);
-  }
-};
-</script>
+        function decodePolyline(encoded) {
+            let pts = [], idx = 0, lat = 0, lng = 0;
+            while (idx < encoded.length) {
+                let b, shift = 0, result = 0;
+                do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+                lat += (result & 1) ? ~(result >> 1) : result >> 1;
+                shift = 0; result = 0;
+                do { b = encoded.charCodeAt(idx++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+                lng += (result & 1) ? ~(result >> 1) : result >> 1;
+                pts.push([lat / 1e5, lng / 1e5]);
+            }
+            return pts;
+        }
+
+        function initMap(data) {
+            // Guard against Leaflet not being loaded yet
+            if (typeof L === 'undefined') {
+                setTimeout(() => initMap(data), 100);
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('header').style.display = 'flex';
+            document.getElementById('stats').innerText = `${data.distance_km}km • ${data.duration_min}mins`;
+
+            if (mapInstance) mapInstance.remove();
+
+            mapInstance = L.map('map', { zoomControl: false });
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; CARTO'
+            }).addTo(mapInstance);
+
+            const coords = data.encoded_polyline ? decodePolyline(data.encoded_polyline) : [[data.origin_lat, data.origin_lng], [data.dest_lat, data.dest_lng]];
+            const route = L.polyline(coords, { color: '#3b82f6', weight: 5, opacity: 0.8 }).addTo(mapInstance);
+            
+            L.circleMarker([data.origin_lat, data.origin_lng], { color: '#1d4ed8', radius: 6, fillOpacity: 1 }).addTo(mapInstance);
+            L.circleMarker([data.dest_lat, data.dest_lng], { color: '#dc2626', radius: 6, fillOpacity: 1 }).addTo(mapInstance);
+
+            mapInstance.fitBounds(route.getBounds(), { padding: [30, 30] });
+
+            // CRITICAL: Force Leaflet to recalculate container size inside the sandbox
+            setTimeout(() => { mapInstance.invalidateSize(); }, 300);
+        }
+
+        // --- MCP BRIDGE ---
+        window.addEventListener("message", (event) => {
+            const msg = event.data;
+            if (msg.method === "ui/notifications/tool-result") {
+                const content = msg.params.result.content.find(c => c.type === 'text');
+                if (content) {
+                    try {
+                        initMap(JSON.parse(content.text));
+                    } catch (e) { console.error("Parse error", e); }
+                }
+            }
+            if (msg.method === "ui/initialize") {
+                window.parent.postMessage({ jsonrpc: "2.0", id: msg.id, method: "ui/initialize", result: {} }, "*");
+            }
+        });
+
+        // Announce readiness
+        window.parent.postMessage({ jsonrpc: "2.0", method: "ui/initialize", params: {} }, "*");
+    </script>
 </body>
-</html>"""
+</html>
+"""
 
 
 # ─── Tools ───────────────────────────────────────────────────────────────────
@@ -469,14 +284,13 @@ async def get_route_info(
         ),
     }
 
-#app=AppConfig(resource_uri=VIEW_URI)
-@mcp.tool()
+@mcp.tool(app={"resourceUri":VIEW_URI, })
 async def show_route_map(
     start_address: str,
     end_address: str,
     route_id: str,
     detail_level: str = "summary",
-) -> types.CallToolResult:
+) -> ToolResult:
     """
     Display an interactive map with the route drawn along actual roads.
     Call this immediately after get_route_info using its route_id.
@@ -543,27 +357,16 @@ async def show_route_map(
         "detail_level":     detail_level,
     }
 
-    return types.CallToolResult(
-        content=[
-            types.TextContent(type="text", text=json.dumps(payload))
+    return ToolResult(content=[
+        types.TextContent(type="text", text=json.dumps(payload)),
         ],
         meta={
             "ui": {
-                "html": map_view(), # <--- Inject raw HTML directly
-                "csp": {
-                    "resource_domains": [
-                        "https://unpkg.com",
-                        "https://a.basemaps.cartocdn.com",
-                        "https://b.basemaps.cartocdn.com",
-                        "https://c.basemaps.cartocdn.com",
-                        "https://d.basemaps.cartocdn.com",
-                        "https://basemaps.cartocdn.com"
-                    ]
-                }
-            }
-        }
-    )
-
+                "resourceUri": VIEW_URI
+            },
+            # Explicit alias for ChatGPT as per documentation
+            "openai/outputTemplate": VIEW_URI 
+        })
 
 # ─── Prompts ─────────────────────────────────────────────────────────────────
 
