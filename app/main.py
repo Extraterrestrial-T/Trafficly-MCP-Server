@@ -211,6 +211,14 @@ def _unwrap_cached_route(
     }
 
 
+def _route_data_has_routes(route_data: Any) -> bool:
+    return (
+        isinstance(route_data, dict)
+        and isinstance(route_data.get("routes"), list)
+        and len(route_data["routes"]) > 0
+    )
+
+
 def _point_payload(location: dict[str, Any], label: str = "") -> dict[str, Any]:
     lat_lng = _lat_lng(location)
     return {
@@ -377,12 +385,37 @@ async def get_route_info(
 
     cached_route = await upstash_redis.base_redis_client.get(key)
     if cached_route:
-        logger.info("[TOOL] get_route_info | %s -> %s (cached)", start_address, end_address)
-    else:
+        cached_route_data, _cached_request = _unwrap_cached_route(
+            cached_route,
+            fallback_start_address=start_address,
+            fallback_end_address=end_address,
+            fallback_detail_level=detail_level,
+        )
+        if _route_data_has_routes(cached_route_data):
+            logger.info(
+                "[TOOL] get_route_info | %s -> %s (cached)",
+                start_address,
+                end_address,
+            )
+        else:
+            logger.warning(
+                "[TOOL] get_route_info | ignoring cached route with no routes | key=%s",
+                key,
+            )
+            cached_route = None
+
+    if not cached_route:
         logger.info("[TOOL] get_route_info | %s -> %s", start_address, end_address)
 
         geocode_a = await my_maps_client.get_geocode(start_address)
         geocode_b = await my_maps_client.get_geocode(end_address)
+        if not geocode_a or not geocode_b:
+            return {
+                "error": "Could not geocode the start or destination address.",
+                "route_id": key,
+                "next_step": "Ask the user for more specific start and destination addresses.",
+            }
+
         geocoded_stops = []
         successful_stops = []
         for stop in stops:
@@ -399,6 +432,22 @@ async def get_route_info(
             stops=geocoded_stops,
             departure_time=departure_time,
         )
+        if not _route_data_has_routes(route_data):
+            logger.warning(
+                "[TOOL] get_route_info failed | no routes returned | start=%s end=%s stops=%s",
+                start_address,
+                end_address,
+                successful_stops,
+            )
+            return {
+                "error": (
+                    "Google Routes did not return a usable route. Try a later departure time "
+                    "or more specific stop/destination names."
+                ),
+                "route_id": key,
+                "next_step": "Do not call show_route_map for this route_id; ask for a corrected route request.",
+            }
+
         envelope = _route_cache_envelope(
             route_data=route_data,
             start_address=start_address,
@@ -481,6 +530,29 @@ async def show_route_map(
         fallback_end_address=end_address,
         fallback_detail_level=detail_level,
     )
+    if not _route_data_has_routes(route_data):
+        logger.warning("[TOOL] show_route_map unusable cached route | route_id=%s", route_id)
+        error_payload = {
+            "error": (
+                "This cached route does not contain usable map coordinates. "
+                "Please call get_route_info again to refresh it."
+            ),
+            "route_id": route_id,
+        }
+        return ToolResult(
+            content=[
+                types.TextContent(
+                    type="text",
+                    text=error_payload["error"],
+                )
+            ],
+            structured_content=error_payload,
+            meta={
+                "ui": {"resourceUri": VIEW_URI},
+                "openai/outputTemplate": VIEW_URI,
+            },
+        )
+
     payload = _normalize_route_payload(
         route_data=route_data,
         request_meta=request_meta,

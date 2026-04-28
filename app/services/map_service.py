@@ -239,23 +239,32 @@ class Map_client():
         tz_info = ZoneInfo(tz)
 
         raw_departure_time = departure_time
+        now = datetime.now(tz_info)
         if departure_time == "now":
-            dt = datetime.now(tz_info) + timedelta(minutes=2)
+            dt = now + timedelta(minutes=2)
 
         else:
             normalized_departure_time = re.sub(r"\s+", "", departure_time.strip().upper())
-            today = datetime.now(tz_info).date()
+            today = now.date()
             dt = None
             for time_format in ("%I:%M%p", "%H:%M"):
                 try:
                     parsed_time = datetime.strptime(normalized_departure_time, time_format).time()
-                    dt = datetime.combine(today, parsed_time, tzinfo=tz_info) + timedelta(minutes=2)
+                    requested_dt = datetime.combine(today, parsed_time, tzinfo=tz_info)
+                    if requested_dt <= now:
+                        print(
+                            f"Requested departure time {raw_departure_time} is not in the future. "
+                            "Defaulting to now."
+                        )
+                        dt = now + timedelta(minutes=2)
+                    else:
+                        dt = requested_dt + timedelta(minutes=2)
                     break
                 except ValueError:
                     continue
             if dt is None:
                 print(f"Invalid departure time: {raw_departure_time}. Defaulting to now.")
-                dt = datetime.now(tz_info) + timedelta(minutes=2)
+                dt = now + timedelta(minutes=2)
 
         departure_time = dt.isoformat()        
         print(f"Resolved departure time: raw={raw_departure_time!r}, resolved={departure_time}")
