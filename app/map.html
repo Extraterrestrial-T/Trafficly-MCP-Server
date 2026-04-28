@@ -30,6 +30,7 @@
     html, body {
       width: 100%;
       height: 100%;
+      min-height: 420px;
       overflow: hidden;
       background: var(--map-bg);
       color: var(--text);
@@ -42,6 +43,7 @@
       z-index: 1;
       width: 100%;
       height: 100%;
+      min-height: 420px;
       background: var(--map-bg);
     }
 
@@ -53,6 +55,8 @@
       z-index: 1000;
       display: none;
       width: min(380px, calc(100vw - 24px));
+      max-height: calc(100vh - 24px);
+      min-height: 280px;
       overflow: hidden;
       flex-direction: column;
       border-radius: 8px;
@@ -185,6 +189,54 @@
       color: #174ea6;
     }
 
+    #route-options {
+      display: none;
+      gap: 8px;
+      margin-top: 12px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    #route-options.visible {
+      display: flex;
+    }
+
+    .route-option {
+      flex: 0 0 auto;
+      min-width: 126px;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .route-option:hover {
+      background: #f8fafd;
+    }
+
+    .route-option.active {
+      border-color: var(--blue);
+      background: #e8f0fe;
+    }
+
+    .route-option-label {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .route-option-meta {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
     #directions-container {
       flex: 1;
       min-height: 0;
@@ -305,6 +357,29 @@
       text-align: center;
     }
 
+    #open-sidebar-btn {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1001;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 999px;
+      background: white;
+      box-shadow: var(--shadow);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #open-sidebar-btn.visible {
+      display: inline-flex;
+    }
+
     .custom-scrollbar::-webkit-scrollbar {
       width: 6px;
     }
@@ -358,6 +433,25 @@
       background: white;
     }
 
+    .stop-marker {
+      width: 16px;
+      height: 16px;
+      border: 2px solid white;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    .direction-arrow {
+      width: 0;
+      height: 0;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 13px solid var(--blue);
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+      transform-origin: 50% 50%;
+    }
+
     @media (max-width: 640px) {
       #sidebar {
         top: auto;
@@ -366,7 +460,14 @@
         left: 0;
         width: 100%;
         height: 42%;
+        min-height: 220px;
         border-radius: 16px 16px 0 0;
+      }
+
+      #open-sidebar-btn {
+        top: auto;
+        bottom: 12px;
+        left: 12px;
       }
 
       #route-title {
@@ -375,6 +476,41 @@
 
       .metric-value {
         font-size: 18px;
+      }
+    }
+
+    @media (max-height: 420px) {
+      html, body, #map {
+        min-height: 320px;
+      }
+
+      #sidebar {
+        top: 8px;
+        bottom: 8px;
+        left: 8px;
+        max-height: calc(100vh - 16px);
+        min-height: 240px;
+      }
+
+      #route-header {
+        padding: 12px;
+      }
+
+      #route-title-row {
+        margin-bottom: 10px;
+      }
+
+      #metrics {
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .metric-card {
+        padding: 9px;
+      }
+
+      .step-item {
+        padding: 9px 12px;
       }
     }
   </style>
@@ -416,6 +552,8 @@
           <p id="route-distance" class="metric-value">--</p>
         </div>
       </div>
+
+      <div id="route-options" class="custom-scrollbar"></div>
     </div>
 
     <div id="directions-container" class="custom-scrollbar">
@@ -429,6 +567,10 @@
     </div>
   </div>
 
+  <button id="open-sidebar-btn" type="button" aria-label="Show directions">
+    <span>Routes</span>
+  </button>
+
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -438,11 +580,14 @@
       "use strict";
 
       var mapInstance = null;
-      var routeLayer = null;
+      var routeLayers = [];
       var markers = [];
+      var directionArrows = [];
       var pendingData = null;
       var leafletReady = false;
       var renderedPayloads = [];
+      var currentPayload = null;
+      var selectedRouteIndex = 0;
 
       function setStatus(text) {
         var el = document.getElementById("loading-text");
@@ -528,6 +673,22 @@
         return typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0);
       }
 
+      function toNumber(value) {
+        return typeof value === "number" ? value : Number(value);
+      }
+
+      function normalizePoint(point) {
+        if (!point) return null;
+        var lat = toNumber(point.latitude !== undefined ? point.latitude : point.lat);
+        var lng = toNumber(point.longitude !== undefined ? point.longitude : point.lng);
+        if (!hasUsablePoint(lat, lng)) return null;
+        return {
+          latitude: lat,
+          longitude: lng,
+          label: point.label || ""
+        };
+      }
+
       function formatDist(meters) {
         return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : meters + " m";
       }
@@ -544,6 +705,69 @@
           iconSize: [30, 42],
           iconAnchor: [15, 42]
         });
+      }
+
+      function stopIcon() {
+        return L.divIcon({
+          className: "custom-stop-icon",
+          html: "<div class='stop-marker'></div>",
+          iconSize: [16, 16],
+          iconAnchor: [8, 8]
+        });
+      }
+
+      function arrowIcon(rotation) {
+        return L.divIcon({
+          className: "custom-direction-icon",
+          html: "<div class='direction-arrow' style='transform: rotate(" + rotation + "deg)'></div>",
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        });
+      }
+
+      function bearingDegrees(from, to) {
+        var lat1 = from[0] * Math.PI / 180;
+        var lat2 = to[0] * Math.PI / 180;
+        var deltaLng = (to[1] - from[1]) * Math.PI / 180;
+        var y = Math.sin(deltaLng) * Math.cos(lat2);
+        var x = Math.cos(lat1) * Math.sin(lat2) -
+          Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+      }
+
+      function getRouteOptions(data) {
+        if (Array.isArray(data.routes) && data.routes.length > 0) return data.routes;
+        return [{
+          index: 0,
+          label: "Best route",
+          distance_km: data.distance_km,
+          duration_min: data.duration_min,
+          encoded_polyline: data.encoded_polyline,
+          origin_lat: data.origin_lat,
+          origin_lng: data.origin_lng,
+          dest_lat: data.dest_lat,
+          dest_lng: data.dest_lng,
+          origin: data.origin,
+          destination: data.destination,
+          waypoints: data.waypoints || [],
+          steps: data.steps || [],
+          legs: data.legs || [],
+          detail_level: data.detail_level
+        }];
+      }
+
+      function routeCoords(route) {
+        var coords = [];
+        if (route.encoded_polyline) {
+          coords = decodePolyline(route.encoded_polyline);
+        }
+        if (!coords.length && hasUsablePoint(route.origin_lat, route.origin_lng) && hasUsablePoint(route.dest_lat, route.dest_lng)) {
+          coords = [
+            [route.origin_lat, route.origin_lng],
+            [route.dest_lat, route.dest_lng]
+          ];
+        }
+        return coords;
       }
 
       function initMap() {
@@ -563,14 +787,18 @@
       }
 
       function clearRoute() {
-        if (routeLayer) {
-          mapInstance.removeLayer(routeLayer);
-          routeLayer = null;
-        }
+        routeLayers.forEach(function (layer) {
+          mapInstance.removeLayer(layer);
+        });
+        routeLayers = [];
         markers.forEach(function (marker) {
           mapInstance.removeLayer(marker);
         });
         markers = [];
+        directionArrows.forEach(function (arrow) {
+          mapInstance.removeLayer(arrow);
+        });
+        directionArrows = [];
       }
 
       function addMarker(lat, lng, label, color) {
@@ -580,18 +808,65 @@
         markers.push(marker);
       }
 
-      function updateSteps(data) {
+      function addStopMarker(point, fallbackLabel) {
+        var normalized = normalizePoint(point);
+        if (!normalized) return;
+        var marker = L.marker([normalized.latitude, normalized.longitude], { icon: stopIcon() }).addTo(mapInstance);
+        marker.bindPopup("<b>" + (normalized.label || fallbackLabel) + "</b>");
+        markers.push(marker);
+      }
+
+      function addDirectionArrows(coords) {
+        if (!coords || coords.length < 2) return;
+        var count = Math.min(4, Math.max(1, Math.floor(coords.length / 12)));
+        for (var i = 1; i <= count; i += 1) {
+          var index = Math.floor((coords.length - 1) * (i / (count + 1)));
+          var from = coords[Math.max(0, index - 1)];
+          var to = coords[Math.min(coords.length - 1, index + 1)];
+          if (!from || !to) continue;
+          var arrow = L.marker(coords[index], { icon: arrowIcon(bearingDegrees(from, to) - 90), interactive: false }).addTo(mapInstance);
+          directionArrows.push(arrow);
+        }
+      }
+
+      function updateRouteOptions(routes) {
+        var options = document.getElementById("route-options");
+        options.innerHTML = "";
+        options.classList.toggle("visible", routes.length > 1);
+        if (routes.length <= 1) return;
+
+        routes.forEach(function (route, index) {
+          var button = document.createElement("button");
+          var label = document.createElement("span");
+          var meta = document.createElement("span");
+          button.type = "button";
+          button.className = "route-option" + (index === selectedRouteIndex ? " active" : "");
+          label.className = "route-option-label";
+          meta.className = "route-option-meta";
+          label.textContent = route.label || (index === 0 ? "Best route" : "Route " + (index + 1));
+          meta.textContent = route.duration_min + " min | " + route.distance_km + " km";
+          button.appendChild(label);
+          button.appendChild(meta);
+          button.addEventListener("click", function () {
+            selectedRouteIndex = index;
+            renderMap(currentPayload, selectedRouteIndex);
+          });
+          options.appendChild(button);
+        });
+      }
+
+      function updateSteps(route) {
         var stepsContainer = document.getElementById("steps-list");
         var emptyState = document.getElementById("empty-state");
         stepsContainer.innerHTML = "";
 
-        if (!Array.isArray(data.steps) || data.steps.length === 0) {
+        if (!Array.isArray(route.steps) || route.steps.length === 0) {
           emptyState.style.display = "block";
           return;
         }
 
         emptyState.style.display = "none";
-        data.steps.forEach(function (step, index) {
+        route.steps.forEach(function (step, index) {
           var row = document.createElement("div");
           var badge = document.createElement("span");
           var copy = document.createElement("div");
@@ -622,60 +897,76 @@
         });
       }
 
-      function renderMap(data) {
+      function renderMap(data, nextSelectedRouteIndex) {
         initMap();
         if (!mapInstance) return;
 
+        currentPayload = data;
+        var routes = getRouteOptions(data);
+        selectedRouteIndex = Math.max(0, Math.min(nextSelectedRouteIndex || 0, routes.length - 1));
+        var selectedRoute = routes[selectedRouteIndex] || routes[0];
+
         document.getElementById("sidebar").classList.add("visible");
+        document.getElementById("open-sidebar-btn").classList.remove("visible");
         document.getElementById("start-label").textContent = data.start_address || "Current location";
         document.getElementById("end-label").textContent = data.end_address || "Destination";
-        document.getElementById("route-duration").textContent = data.duration_min + " min";
-        document.getElementById("route-distance").textContent = data.distance_km + " km";
+        document.getElementById("route-duration").textContent = selectedRoute.duration_min + " min";
+        document.getElementById("route-distance").textContent = selectedRoute.distance_km + " km";
         document.getElementById("update-time").textContent =
           "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        updateRouteOptions(routes);
 
         clearRoute();
 
-        var coords = [];
-        if (data.encoded_polyline) {
-          coords = decodePolyline(data.encoded_polyline);
-        }
-        if (!coords.length && hasUsablePoint(data.origin_lat, data.origin_lng) && hasUsablePoint(data.dest_lat, data.dest_lng)) {
-          coords = [
-            [data.origin_lat, data.origin_lng],
-            [data.dest_lat, data.dest_lng]
-          ];
-        }
+        var coords = routeCoords(selectedRoute);
         if (!coords.length) {
           setStatus("Trafficly received the route, but it did not include map coordinates.");
           return;
         }
 
-        routeLayer = L.polyline(coords, {
-          color: "#1a73e8",
-          weight: 6,
-          opacity: 0.88,
-          lineJoin: "round"
-        }).addTo(mapInstance);
+        var selectedLayer = null;
+        routes.forEach(function (route, index) {
+          var optionCoords = routeCoords(route);
+          if (!optionCoords.length) return;
+          var isSelected = index === selectedRouteIndex;
+          var layer = L.polyline(optionCoords, {
+            color: isSelected ? "#1a73e8" : "#8896a8",
+            weight: isSelected ? 6 : 4,
+            opacity: isSelected ? 0.9 : 0.45,
+            lineJoin: "round"
+          }).addTo(mapInstance);
+          layer.on("click", function () {
+            selectedRouteIndex = index;
+            renderMap(currentPayload, selectedRouteIndex);
+          });
+          if (isSelected) {
+            selectedLayer = layer;
+          } else {
+            layer.bringToBack();
+          }
+          routeLayers.push(layer);
+        });
 
-        addMarker(data.origin_lat, data.origin_lng, data.start_address, "#1a73e8");
-        addMarker(data.dest_lat, data.dest_lng, data.end_address, "#dc2626");
+        addMarker(selectedRoute.origin_lat, selectedRoute.origin_lng, data.start_address, "#1a73e8");
+        addMarker(selectedRoute.dest_lat, selectedRoute.dest_lng, data.end_address, "#dc2626");
 
-        if (Array.isArray(data.waypoints)) {
-          data.waypoints.forEach(function (wp, index) {
+        if (Array.isArray(selectedRoute.waypoints)) {
+          selectedRoute.waypoints.forEach(function (wp, index) {
             if (wp) {
-              addMarker(wp.latitude, wp.longitude, "Stop " + (index + 1), "#f59e0b");
+              addStopMarker(wp, "Stop " + (index + 1));
             }
           });
         }
 
-        mapInstance.fitBounds(routeLayer.getBounds(), { padding: [64, 64] });
+        addDirectionArrows(coords);
+
+        mapInstance.fitBounds((selectedLayer || routeLayers[0]).getBounds(), { padding: [64, 64] });
         mapInstance.invalidateSize();
         setTimeout(function () {
           if (mapInstance) mapInstance.invalidateSize();
         }, 400);
 
-        updateSteps(data);
+        updateSteps(selectedRoute);
 
         var loading = document.getElementById("loading");
         loading.classList.add("hidden");
@@ -701,8 +992,20 @@
 
       document.addEventListener("DOMContentLoaded", function () {
         var closeBtn = document.getElementById("close-btn");
+        var openBtn = document.getElementById("open-sidebar-btn");
         closeBtn.addEventListener("click", function () {
           document.getElementById("sidebar").classList.remove("visible");
+          openBtn.classList.add("visible");
+          setTimeout(function () {
+            if (mapInstance) mapInstance.invalidateSize();
+          }, 80);
+        });
+        openBtn.addEventListener("click", function () {
+          document.getElementById("sidebar").classList.add("visible");
+          openBtn.classList.remove("visible");
+          setTimeout(function () {
+            if (mapInstance) mapInstance.invalidateSize();
+          }, 80);
         });
 
         function checkLeaflet() {

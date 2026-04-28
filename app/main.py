@@ -135,6 +135,92 @@ def _lat_lng(location: dict[str, Any]) -> dict[str, Any]:
     return location.get("latLng", {}) if isinstance(location, dict) else {}
 
 
+def _point_payload(location: dict[str, Any], label: str = "") -> dict[str, Any]:
+    lat_lng = _lat_lng(location)
+    return {
+        "latitude": lat_lng.get("latitude", 0),
+        "longitude": lat_lng.get("longitude", 0),
+        "label": label,
+    }
+
+
+def _normalize_route_option(
+    route: dict[str, Any],
+    index: int,
+    start_address: str,
+    end_address: str,
+    detail_level: str,
+) -> dict[str, Any]:
+    legs = route.get("legs", []) if isinstance(route, dict) else []
+    first_leg = legs[0] if legs else {}
+    last_leg = legs[-1] if legs else {}
+    dist_m = route.get("distanceMeters", 0)
+    dist_km = round(dist_m / 1000, 1) if dist_m else 0
+
+    leg_summaries = []
+    steps = []
+    waypoints = []
+
+    for leg_index, leg in enumerate(legs):
+        leg_start = _point_payload(
+            leg.get("startLocation", {}),
+            start_address if leg_index == 0 else f"Stop {leg_index}",
+        )
+        leg_end = _point_payload(
+            leg.get("endLocation", {}),
+            end_address if leg_index == len(legs) - 1 else f"Stop {leg_index + 1}",
+        )
+        leg_summaries.append(
+            {
+                "index": leg_index,
+                "distance_m": leg.get("distanceMeters", 0),
+                "duration_min": _duration_to_minutes(leg.get("duration")),
+                "start": leg_start,
+                "end": leg_end,
+            }
+        )
+        if 0 < leg_index:
+            waypoints.append(leg_start)
+
+        for step_index, step in enumerate(leg.get("steps", [])):
+            steps.append(
+                {
+                    "leg_index": leg_index,
+                    "step_index": step_index,
+                    "instruction": step.get("navigationInstruction", {}).get(
+                        "instructions", "Continue"
+                    ),
+                    "distance_m": step.get("distanceMeters", 0),
+                    "maneuver": step.get("navigationInstruction", {}).get("maneuver", ""),
+                    "start": _point_payload(step.get("startLocation", {})),
+                    "end": _point_payload(step.get("endLocation", {})),
+                }
+            )
+
+    origin = _point_payload(first_leg.get("startLocation", {}), start_address)
+    destination = _point_payload(last_leg.get("endLocation", {}), end_address)
+
+    return {
+        "index": index,
+        "label": "Best route" if index == 0 else f"Route {index + 1}",
+        "start_address": start_address,
+        "end_address": end_address,
+        "distance_km": dist_km,
+        "duration_min": _duration_to_minutes(route.get("duration")),
+        "encoded_polyline": route.get("polyline", {}).get("encodedPolyline", ""),
+        "origin_lat": origin["latitude"],
+        "origin_lng": origin["longitude"],
+        "dest_lat": destination["latitude"],
+        "dest_lng": destination["longitude"],
+        "origin": origin,
+        "destination": destination,
+        "waypoints": waypoints,
+        "legs": leg_summaries,
+        "steps": steps,
+        "detail_level": detail_level,
+    }
+
+
 def _normalize_route_payload(
     route_data: dict[str, Any],
     start_address: str,
@@ -142,37 +228,31 @@ def _normalize_route_payload(
     detail_level: str,
 ) -> dict[str, Any]:
     routes = route_data.get("routes", []) if isinstance(route_data, dict) else []
-    best = routes[0] if routes else {}
-    legs = best.get("legs", []) if isinstance(best, dict) else []
-    first_leg = legs[0] if legs else {}
-    last_leg = legs[-1] if legs else {}
-
-    origin_latlng = _lat_lng(first_leg.get("startLocation", {}))
-    dest_latlng = _lat_lng(last_leg.get("endLocation", {}))
-    dist_m = best.get("distanceMeters", 0)
-    dist_km = round(dist_m / 1000, 1) if dist_m else 0
+    normalized_routes = [
+        _normalize_route_option(route, index, start_address, end_address, detail_level)
+        for index, route in enumerate(routes)
+    ]
+    best = normalized_routes[0] if normalized_routes else _normalize_route_option(
+        {}, 0, start_address, end_address, detail_level
+    )
 
     return {
         "start_address": start_address,
         "end_address": end_address,
-        "distance_km": dist_km,
-        "duration_min": _duration_to_minutes(best.get("duration")),
-        "encoded_polyline": best.get("polyline", {}).get("encodedPolyline", ""),
-        "origin_lat": origin_latlng.get("latitude", 0),
-        "origin_lng": origin_latlng.get("longitude", 0),
-        "dest_lat": dest_latlng.get("latitude", 0),
-        "dest_lng": dest_latlng.get("longitude", 0),
-        "waypoints": [_lat_lng(leg.get("startLocation", {})) for leg in legs[1:]],
-        "steps": [
-            {
-                "instruction": step.get("navigationInstruction", {}).get(
-                    "instructions", "Continue"
-                ),
-                "distance_m": step.get("distanceMeters", 0),
-                "maneuver": step.get("navigationInstruction", {}).get("maneuver", ""),
-            }
-            for step in first_leg.get("steps", [])
-        ],
+        "selected_route_index": 0,
+        "routes": normalized_routes,
+        "distance_km": best["distance_km"],
+        "duration_min": best["duration_min"],
+        "encoded_polyline": best["encoded_polyline"],
+        "origin_lat": best["origin_lat"],
+        "origin_lng": best["origin_lng"],
+        "dest_lat": best["dest_lat"],
+        "dest_lng": best["dest_lng"],
+        "origin": best["origin"],
+        "destination": best["destination"],
+        "waypoints": best["waypoints"],
+        "legs": best["legs"],
+        "steps": best["steps"],
         "detail_level": detail_level,
     }
 
