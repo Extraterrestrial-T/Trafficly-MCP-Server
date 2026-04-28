@@ -1,469 +1,528 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-  <meta name="color-scheme" content="dark"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="color-scheme" content="dark">
   <title>Trafficly</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     :root {
-      --bg:        #0f1117;
-      --surface:   #1a1d2e;
-      --border:    #2d3148;
-      --accent:    #3b82f6;
-      --accent-dk: #1d4ed8;
-      --danger:    #dc2626;
-      --text:      #e2e8f0;
-      --muted:     #64748b;
+      --bg: #0f1117;
+      --surface: #1a1d2e;
+      --border: #2d3148;
+      --accent: #3b82f6;
+      --accent-dark: #1d4ed8;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
     }
 
     html, body {
-      height: 100%; width: 100%;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      overflow: hidden;
     }
 
     #shell {
       display: flex;
       flex-direction: column;
-      height: 100vh;
       width: 100vw;
+      height: 100vh;
     }
 
-    /* ── Header ── */
     #header {
-      display: none;           /* shown once data arrives */
+      display: none;
       flex-shrink: 0;
+      align-items: center;
+      gap: 12px;
       height: 52px;
+      padding: 0 16px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      align-items: center;
-      padding: 0 16px;
-      gap: 12px;
     }
-    #header.visible { display: flex; }
+
+    #header.visible {
+      display: flex;
+    }
 
     #logo {
-      font-weight: 700;
-      font-size: 15px;
+      flex-shrink: 0;
       color: var(--accent);
-      letter-spacing: -0.02em;
+      font-size: 15px;
+      font-weight: 700;
       white-space: nowrap;
     }
 
     #route-label {
       flex: 1;
-      font-size: 12px;
-      color: var(--muted);
       overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
     #stats {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text);
-      white-space: nowrap;
-      background: var(--border);
+      flex-shrink: 0;
       padding: 4px 10px;
       border-radius: 999px;
+      background: var(--border);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
     }
 
-    /* ── Map ── */
     #map {
       flex: 1;
       width: 100%;
+      min-height: 0;
       background: #111;
     }
 
-    /* ── Loading overlay ── */
     #loading {
       position: absolute;
       inset: 0;
-      background: var(--bg);
+      z-index: 9999;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 14px;
-      z-index: 9999;
+      background: var(--bg);
       transition: opacity 0.3s ease;
     }
+
     #loading.hidden {
       opacity: 0;
       pointer-events: none;
     }
 
     .spinner {
-      width: 32px; height: 32px;
+      width: 32px;
+      height: 32px;
       border: 3px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin 0.9s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
     #loading-text {
-      font-size: 13px;
+      max-width: 280px;
       color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      text-align: center;
     }
 
-    /* ── Leaflet overrides ── */
-    .leaflet-control-attribution {
-      font-size: 9px !important;
-      background: rgba(15,17,23,0.7) !important;
-      color: #475569 !important;
-    }
-    .leaflet-control-attribution a { color: #475569 !important; }
-
-    /* ── Step drawer (detail mode) ── */
     #steps-drawer {
-      display: none;
       position: absolute;
-      bottom: 0; left: 0; right: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 800;
+      display: none;
       max-height: 38%;
+      padding: 10px 0 16px;
+      overflow-y: auto;
       background: var(--surface);
       border-top: 1px solid var(--border);
-      overflow-y: auto;
-      z-index: 800;
-      padding: 10px 0 16px;
     }
-    #steps-drawer.visible { display: block; }
+
+    #steps-drawer.visible {
+      display: block;
+    }
+
     .step-row {
       display: flex;
       align-items: flex-start;
       gap: 10px;
       padding: 6px 16px;
-      font-size: 12px;
       border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      line-height: 1.35;
     }
-    .step-row:last-child { border-bottom: none; }
+
+    .step-row:last-child {
+      border-bottom: none;
+    }
+
     .step-dist {
       flex-shrink: 0;
-      color: var(--muted);
       width: 52px;
+      color: var(--muted);
       text-align: right;
+    }
+
+    .leaflet-control-attribution {
+      background: rgba(15, 17, 23, 0.72) !important;
+      color: #64748b !important;
+      font-size: 9px !important;
+    }
+
+    .leaflet-control-attribution a {
+      color: #64748b !important;
     }
   </style>
 </head>
 <body>
-
-  <!-- Loading overlay -->
   <div id="loading">
     <div class="spinner"></div>
-    <div id="loading-text">Connecting to Trafficly…</div>
+    <div id="loading-text">Connecting to Trafficly...</div>
   </div>
 
-  <!-- Main shell -->
   <div id="shell">
     <div id="header">
-      <span id="logo">⚡ Trafficly</span>
+      <span id="logo">Trafficly</span>
       <span id="route-label"></span>
       <span id="stats"></span>
     </div>
     <div id="map"></div>
   </div>
 
-  <!-- Step-by-step drawer (hidden by default, shown in detailed mode) -->
   <div id="steps-drawer"></div>
 
-  <!-- Leaflet — classic script tag, compatible with sandbox CSP -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MCP APPS BRIDGE  (inline reimplementation of @modelcontextprotocol/ext-apps)
-  //
-  // Protocol: JSON-RPC 2.0 over window.postMessage
-  // Handshake:
-  //   1. App  → host:  { jsonrpc:"2.0", id:1, method:"ui/initialize", params:{name,version} }
-  //   2. Host → app:   { jsonrpc:"2.0", id:1, result:{...} }             (ack)
-  //   3. Host → app:   { jsonrpc:"2.0", method:"ui/notifications/tool-result",
-  //                      params:{ result:{ content:[...] } } }
-  //
-  // Both Claude and ChatGPT implement this bridge. No external SDK needed.
-  // ═══════════════════════════════════════════════════════════════════════════
+    (function () {
+      "use strict";
 
-  (function () {
-    "use strict";
+      var mapInstance = null;
+      var pendingData = null;
+      var leafletReady = false;
+      var renderedPayloads = [];
 
-    var _reqId = 1;
-    var _origin = "*";        // tightened after first trusted message
-    var _initialized = false;
+      function setStatus(text) {
+        var el = document.getElementById("loading-text");
+        if (el) el.textContent = text;
+      }
 
-    /** Send a JSON-RPC message to the host */
-    function rpc(method, params, id) {
-      var msg = { jsonrpc: "2.0", method: method };
-      if (id !== undefined) msg.id = id;
-      if (params !== undefined) msg.params = params;
-      window.parent.postMessage(msg, _origin);
-    }
-
-    /** Called when host pushes a tool result into this frame */
-    function onToolResult(result) {
-      if (!result || !result.content) return;
-      var textBlock = null;
-      for (var i = 0; i < result.content.length; i++) {
-        if (result.content[i].type === "text") {
-          textBlock = result.content[i];
-          break;
+      function parseMaybeJson(value) {
+        if (typeof value !== "string") return value;
+        try {
+          return JSON.parse(value);
+        } catch (_error) {
+          return null;
         }
       }
-      if (!textBlock) return;
-      try {
-        var data = JSON.parse(textBlock.text);
-        if (typeof window.__ontoolresult === "function") {
-          window.__ontoolresult(data);
-        }
-      } catch (e) {
-        console.error("[trafficly] Failed to parse tool result:", e);
-      }
-    }
 
-    /** Handle all inbound postMessage frames */
-    window.addEventListener("message", function (event) {
-      var msg = event.data;
-      if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0") return;
-
-      // Trust the origin of the first legitimate message we receive
-      if (_origin === "*" && event.origin) {
-        _origin = event.origin;
-      }
-
-      // ── Ack to our ui/initialize ──
-      if (msg.id === 1 && msg.result !== undefined && !_initialized) {
-        _initialized = true;
-        document.getElementById("loading-text").textContent = "Waiting for route data…";
-        return;
-      }
-
-      // ── Tool result notification ──
-      if (msg.method === "ui/notifications/tool-result" && msg.params) {
-        onToolResult(msg.params.result);
-        return;
-      }
-
-      // ── ChatGPT also sends toolOutput via window.openai (extension) ──
-      // Handled separately below via window.openai feature-detection.
-    });
-
-    /** Send ui/initialize as soon as DOM is interactive */
-    function connect() {
-      rpc("ui/initialize", { name: "trafficly-map", version: "1.0.0" }, _reqId++);
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", connect);
-    } else {
-      connect();
-    }
-
-    // ── ChatGPT extension: window.openai.toolOutput ──
-    // Feature-detect; do not throw if not present (other hosts won't have it).
-    if (typeof window !== "undefined") {
-      window.addEventListener("load", function () {
-        var openai = window.openai;
-        if (openai && typeof openai.toolOutput !== "undefined") {
-          try {
-            openai.toolOutput.then
-              ? openai.toolOutput.then(onToolResult)   // Promise form
-              : onToolResult(openai.toolOutput);        // Direct value form
-          } catch (e) {
-            console.warn("[trafficly] window.openai.toolOutput error:", e);
+      function extractPayload(result) {
+        if (!result) return null;
+        if (result.structuredContent) return result.structuredContent;
+        if (result.structured_content) return result.structured_content;
+        if (result.output && typeof result.output === "object") return result.output;
+        if (result.content && Array.isArray(result.content)) {
+          for (var i = 0; i < result.content.length; i += 1) {
+            var block = result.content[i];
+            if (block && block.type === "text") {
+              var parsed = parseMaybeJson(block.text);
+              if (parsed) return parsed;
+            }
           }
         }
+        if (typeof result === "object" && typeof result.origin_lat !== "undefined") {
+          return result;
+        }
+        return null;
+      }
+
+      function receiveToolResult(result, source) {
+        var payload = extractPayload(result);
+        if (!payload || payload.error) {
+          if (payload && payload.error) setStatus(payload.error);
+          return;
+        }
+        if (typeof payload.origin_lat === "undefined") {
+          console.warn("[trafficly] Ignoring unexpected payload from " + source, payload);
+          return;
+        }
+        var fingerprint = JSON.stringify(payload);
+        if (renderedPayloads.indexOf(fingerprint) !== -1) return;
+        renderedPayloads.push(fingerprint);
+        if (renderedPayloads.length > 3) renderedPayloads.shift();
+        pendingData = payload;
+        tryRender();
+      }
+
+      function decodePolyline(encoded) {
+        var pts = [];
+        var idx = 0;
+        var lat = 0;
+        var lng = 0;
+        while (idx < encoded.length) {
+          var b;
+          var shift = 0;
+          var result = 0;
+          do {
+            b = encoded.charCodeAt(idx++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+          } while (b >= 0x20);
+          lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+          shift = 0;
+          result = 0;
+          do {
+            b = encoded.charCodeAt(idx++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+          } while (b >= 0x20);
+          lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+          pts.push([lat / 1e5, lng / 1e5]);
+        }
+        return pts;
+      }
+
+      function formatDist(meters) {
+        return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : meters + " m";
+      }
+
+      function hasUsablePoint(lat, lng) {
+        return typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0);
+      }
+
+      function renderMap(data) {
+        var header = document.getElementById("header");
+        header.classList.add("visible");
+        document.getElementById("route-label").textContent =
+          data.start_address + " -> " + data.end_address;
+        document.getElementById("stats").textContent =
+          data.distance_km + " km | " + data.duration_min + " min";
+
+        if (mapInstance) {
+          mapInstance.remove();
+          mapInstance = null;
+        }
+
+        mapInstance = L.map("map", {
+          zoomControl: false,
+          attributionControl: true
+        });
+
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          attribution: "&copy; <a href='https://carto.com/'>CARTO</a>",
+          subdomains: "abcd",
+          maxZoom: 19
+        }).addTo(mapInstance);
+
+        var coords = [];
+        if (data.encoded_polyline) {
+          coords = decodePolyline(data.encoded_polyline);
+        }
+        if (!coords.length && hasUsablePoint(data.origin_lat, data.origin_lng) && hasUsablePoint(data.dest_lat, data.dest_lng)) {
+          coords = [
+            [data.origin_lat, data.origin_lng],
+            [data.dest_lat, data.dest_lng]
+          ];
+        }
+        if (!coords.length) {
+          setStatus("Trafficly received the route, but it did not include map coordinates.");
+          return;
+        }
+
+        var routeLine = L.polyline(coords, {
+          color: "#3b82f6",
+          weight: 5,
+          opacity: 0.85,
+          lineJoin: "round"
+        }).addTo(mapInstance);
+
+        var iconStyle = "width:14px;height:14px;border-radius:50%;border:2px solid #fff;";
+        var originIcon = L.divIcon({
+          html: "<div style='" + iconStyle + "background:#1d4ed8'></div>",
+          className: "",
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+        var destIcon = L.divIcon({
+          html: "<div style='" + iconStyle + "background:#dc2626'></div>",
+          className: "",
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+
+        if (hasUsablePoint(data.origin_lat, data.origin_lng)) {
+          L.marker([data.origin_lat, data.origin_lng], { icon: originIcon })
+            .bindTooltip(data.start_address, { direction: "top", sticky: false })
+            .addTo(mapInstance);
+        }
+        if (hasUsablePoint(data.dest_lat, data.dest_lng)) {
+          L.marker([data.dest_lat, data.dest_lng], { icon: destIcon })
+            .bindTooltip(data.end_address, { direction: "top", sticky: false })
+            .addTo(mapInstance);
+        }
+
+        if (Array.isArray(data.waypoints)) {
+          data.waypoints.forEach(function (wp) {
+            if (wp && hasUsablePoint(wp.latitude, wp.longitude)) {
+              L.circleMarker([wp.latitude, wp.longitude], {
+                radius: 5,
+                color: "#f59e0b",
+                fillColor: "#f59e0b",
+                fillOpacity: 1
+              }).addTo(mapInstance);
+            }
+          });
+        }
+
+        mapInstance.fitBounds(routeLine.getBounds(), { padding: [32, 32] });
+        mapInstance.invalidateSize();
+        setTimeout(function () {
+          if (mapInstance) mapInstance.invalidateSize();
+        }, 400);
+
+        var drawer = document.getElementById("steps-drawer");
+        drawer.innerHTML = "";
+        drawer.classList.remove("visible");
+        if (data.detail_level === "detailed" && Array.isArray(data.steps) && data.steps.length > 0) {
+          data.steps.forEach(function (step) {
+            var row = document.createElement("div");
+            var dist = document.createElement("span");
+            var text = document.createElement("span");
+            row.className = "step-row";
+            dist.className = "step-dist";
+            dist.textContent = formatDist(step.distance_m || 0);
+            text.textContent = step.instruction || "Continue";
+            row.appendChild(dist);
+            row.appendChild(text);
+            drawer.appendChild(row);
+          });
+          drawer.classList.add("visible");
+        }
+
+        var loading = document.getElementById("loading");
+        loading.classList.add("hidden");
+        setTimeout(function () {
+          loading.style.display = "none";
+        }, 350);
+      }
+
+      function tryRender() {
+        if (!pendingData) return;
+        if (typeof L === "undefined" || !leafletReady) {
+          setTimeout(tryRender, 80);
+          return;
+        }
+        var data = pendingData;
+        pendingData = null;
+        renderMap(data);
+      }
+
+      window.TrafficlyMap = {
+        receiveToolResult: receiveToolResult
+      };
+
+      document.addEventListener("DOMContentLoaded", function () {
+        function checkLeaflet() {
+          if (typeof L !== "undefined") {
+            leafletReady = true;
+            tryRender();
+          } else {
+            setTimeout(checkLeaflet, 50);
+          }
+        }
+        checkLeaflet();
       });
-    }
-  })();
+    })();
+  </script>
 
+  <script>
+    (function () {
+      "use strict";
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // MAP RENDERER
-  // ═══════════════════════════════════════════════════════════════════════════
+      var requestId = 1000;
+      var origin = "*";
+      var initialized = false;
 
-  var _mapInstance = null;
-  var _pendingData = null;
-  var _leafletReady = false;
+      function rpc(method, params, id) {
+        var msg = { jsonrpc: "2.0", method: method };
+        if (id !== undefined) msg.id = id;
+        if (params !== undefined) msg.params = params;
+        window.parent.postMessage(msg, origin);
+      }
 
-  /** Google-encoded polyline decoder */
-  function decodePolyline(encoded) {
-    var pts = [], idx = 0, lat = 0, lng = 0;
-    while (idx < encoded.length) {
-      var b, shift = 0, result = 0;
-      do {
-        b = encoded.charCodeAt(idx++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      lat += (result & 1) ? ~(result >> 1) : (result >> 1);
-      shift = 0; result = 0;
-      do {
-        b = encoded.charCodeAt(idx++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      lng += (result & 1) ? ~(result >> 1) : (result >> 1);
-      pts.push([lat / 1e5, lng / 1e5]);
-    }
-    return pts;
-  }
+      window.TrafficlyFallbackBridge = {
+        connect: function () {
+          rpc("ui/initialize", { name: "trafficly-map", version: "1.0.0" }, requestId++);
+        }
+      };
 
-  function formatDist(m) {
-    return m >= 1000 ? (m / 1000).toFixed(1) + " km" : m + " m";
-  }
-
-  function renderMap(data) {
-    // ── Header ──
-    var header = document.getElementById("header");
-    header.classList.add("visible");
-
-    document.getElementById("route-label").textContent =
-      data.start_address + "  →  " + data.end_address;
-
-    document.getElementById("stats").textContent =
-      data.distance_km + " km • " + data.duration_min + " min";
-
-    // ── Tear down previous map ──
-    if (_mapInstance) {
-      _mapInstance.remove();
-      _mapInstance = null;
-    }
-
-    // ── Init Leaflet ──
-    _mapInstance = L.map("map", {
-      zoomControl: false,
-      attributionControl: true,
-    });
-
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; <a href='https://carto.com/'>CARTO</a>",
-      subdomains: "abcd",
-      maxZoom: 19,
-    }).addTo(_mapInstance);
-
-    // ── Route polyline ──
-    var coords;
-    if (data.encoded_polyline) {
-      coords = decodePolyline(data.encoded_polyline);
-    } else {
-      coords = [
-        [data.origin_lat, data.origin_lng],
-        [data.dest_lat,   data.dest_lng],
-      ];
-    }
-
-    var routeLine = L.polyline(coords, {
-      color: "#3b82f6",
-      weight: 5,
-      opacity: 0.85,
-      lineJoin: "round",
-    }).addTo(_mapInstance);
-
-    // ── Origin / destination markers ──
-    var iconStyle = "width:14px;height:14px;border-radius:50%;border:2px solid #fff;";
-    var originIcon = L.divIcon({
-      html: "<div style='" + iconStyle + "background:#1d4ed8'></div>",
-      className: "", iconSize: [14, 14], iconAnchor: [7, 7],
-    });
-    var destIcon = L.divIcon({
-      html: "<div style='" + iconStyle + "background:#dc2626'></div>",
-      className: "", iconSize: [14, 14], iconAnchor: [7, 7],
-    });
-
-    L.marker([data.origin_lat, data.origin_lng], { icon: originIcon })
-      .bindTooltip(data.start_address, { direction: "top", sticky: false })
-      .addTo(_mapInstance);
-
-    L.marker([data.dest_lat, data.dest_lng], { icon: destIcon })
-      .bindTooltip(data.end_address, { direction: "top", sticky: false })
-      .addTo(_mapInstance);
-
-    // ── Intermediate waypoints ──
-    if (Array.isArray(data.waypoints)) {
-      data.waypoints.forEach(function (wp) {
-        if (wp && wp.latitude && wp.longitude) {
-          L.circleMarker([wp.latitude, wp.longitude], {
-            radius: 5, color: "#f59e0b", fillColor: "#f59e0b", fillOpacity: 1,
-          }).addTo(_mapInstance);
+      window.addEventListener("message", function (event) {
+        var msg = event.data;
+        if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0") return;
+        if (origin === "*" && event.origin) origin = event.origin;
+        if (msg.result !== undefined && msg.id && !initialized) {
+          initialized = true;
+          var loadingText = document.getElementById("loading-text");
+          if (loadingText) loadingText.textContent = "Waiting for route data...";
+          return;
+        }
+        if (msg.method === "ui/notifications/tool-result" && msg.params) {
+          window.TrafficlyMap.receiveToolResult(msg.params.result, "fallback-postmessage");
         }
       });
-    }
+    })();
+  </script>
 
-    // ── Fit bounds ──
-    _mapInstance.fitBounds(routeLine.getBounds(), { padding: [32, 32] });
-
-    // ── CRITICAL: invalidateSize handles the sandboxed-iframe render quirk ──
-    //    Leaflet calculates container dimensions at init time, but inside an
-    //    iframe the layout may still be settling. Two invalidations — one
-    //    immediate, one deferred — cover both fast and slow host renders.
-    _mapInstance.invalidateSize();
-    setTimeout(function () {
-      if (_mapInstance) _mapInstance.invalidateSize();
-    }, 400);
-
-    // ── Step-by-step drawer (detail mode only) ──
-    if (data.detail_level === "detailed" && Array.isArray(data.steps) && data.steps.length > 0) {
-      var drawer = document.getElementById("steps-drawer");
-      drawer.innerHTML = "";
-      data.steps.forEach(function (step) {
-        var row = document.createElement("div");
-        row.className = "step-row";
-        row.innerHTML =
-          "<span class='step-dist'>" + formatDist(step.distance_m || 0) + "</span>" +
-          "<span>" + (step.instruction || "Continue") + "</span>";
-        drawer.appendChild(row);
-      });
-      drawer.classList.add("visible");
-    }
-
-    // ── Hide loading overlay ──
-    var loading = document.getElementById("loading");
-    loading.classList.add("hidden");
-    setTimeout(function () { loading.style.display = "none"; }, 350);
-  }
-
-  // Called by the bridge when the host delivers the parsed payload
-  window.__ontoolresult = function (data) {
-    if (!data || typeof data.origin_lat === "undefined") {
-      console.warn("[trafficly] Received unexpected payload:", data);
-      return;
-    }
-    _pendingData = data;
-    tryRender();
-  };
-
-  function tryRender() {
-    if (!_pendingData) return;
-    if (typeof L === "undefined" || !_leafletReady) {
-      // Leaflet script hasn't finished executing yet — retry shortly
-      setTimeout(tryRender, 80);
-      return;
-    }
-    var data = _pendingData;
-    _pendingData = null;
-    renderMap(data);
-  }
-
-  // Mark Leaflet as ready once its <script> has loaded
-  // We do this by polling — onload doesn't fire reliably inside sandboxed iframes
-  // for dynamically injected scripts, but it does for static <script> tags in body.
-  document.addEventListener("DOMContentLoaded", function () {
-    function checkLeaflet() {
-      if (typeof L !== "undefined") {
-        _leafletReady = true;
-        tryRender(); // in case data already arrived
-      } else {
-        setTimeout(checkLeaflet, 50);
+  <script type="module">
+    (async function () {
+      const bridge = window.TrafficlyFallbackBridge;
+      try {
+        const module = await import("https://unpkg.com/@modelcontextprotocol/ext-apps@0.4.0/app-with-deps");
+        const app = new module.App({ name: "trafficly-map", version: "1.0.0" });
+        app.ontoolresult = (result) => {
+          window.TrafficlyMap.receiveToolResult(result, "ext-apps");
+        };
+        await app.connect();
+      } catch (error) {
+        console.warn("[trafficly] ext-apps bridge unavailable; using inline fallback.", error);
+        bridge.connect();
       }
-    }
-    checkLeaflet();
-  });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      function useOpenAIToolOutput() {
+        var openai = window.openai;
+        if (!openai || typeof openai.toolOutput === "undefined") return;
+        try {
+          if (openai.toolOutput && typeof openai.toolOutput.then === "function") {
+            openai.toolOutput.then(function (toolOutput) {
+              window.TrafficlyMap.receiveToolResult(toolOutput, "openai-toolOutput");
+            });
+          } else {
+            window.TrafficlyMap.receiveToolResult(openai.toolOutput, "openai-toolOutput");
+          }
+        } catch (error) {
+          console.warn("[trafficly] window.openai.toolOutput failed.", error);
+        }
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", useOpenAIToolOutput);
+      } else {
+        useOpenAIToolOutput();
+      }
+      window.addEventListener("load", useOpenAIToolOutput);
+    })();
   </script>
 </body>
 </html>
