@@ -139,10 +139,22 @@
       background: var(--red);
     }
 
+    .point-dot.stop {
+      background: var(--amber);
+    }
+
     #route-connector {
       height: 16px;
       margin-left: 3px;
       border-left: 1px dashed #bdc1c6;
+    }
+
+    #stop-points {
+      display: none;
+    }
+
+    #stop-points.visible {
+      display: block;
     }
 
     #metrics {
@@ -537,6 +549,7 @@
         <span id="start-label">Loading...</span>
       </div>
       <div id="route-connector"></div>
+      <div id="stop-points"></div>
       <div class="route-point">
         <span class="point-dot dest"></span>
         <span id="end-label">Loading...</span>
@@ -855,6 +868,48 @@
         });
       }
 
+      function updateRouteChain(data, route) {
+        var stopPoints = document.getElementById("stop-points");
+        stopPoints.innerHTML = "";
+        document.getElementById("start-label").textContent = data.start_address || "Current location";
+        document.getElementById("end-label").textContent = data.end_address || "Destination";
+
+        if (!Array.isArray(route.waypoints) || route.waypoints.length === 0) {
+          stopPoints.classList.remove("visible");
+          return;
+        }
+
+        route.waypoints.forEach(function (wp, index) {
+          var connectorBefore = document.createElement("div");
+          var row = document.createElement("div");
+          var dot = document.createElement("span");
+          var label = document.createElement("span");
+          var connectorAfter = document.createElement("div");
+
+          connectorBefore.id = "";
+          connectorBefore.className = "route-connector";
+          connectorBefore.style.height = "12px";
+          connectorBefore.style.marginLeft = "3px";
+          connectorBefore.style.borderLeft = "1px dashed #bdc1c6";
+
+          row.className = "route-point";
+          dot.className = "point-dot stop";
+          label.textContent = (wp && wp.label) || "Stop " + (index + 1);
+          row.appendChild(dot);
+          row.appendChild(label);
+
+          connectorAfter.className = "route-connector";
+          connectorAfter.style.height = "12px";
+          connectorAfter.style.marginLeft = "3px";
+          connectorAfter.style.borderLeft = "1px dashed #bdc1c6";
+
+          stopPoints.appendChild(connectorBefore);
+          stopPoints.appendChild(row);
+          stopPoints.appendChild(connectorAfter);
+        });
+        stopPoints.classList.add("visible");
+      }
+
       function updateSteps(route) {
         var stepsContainer = document.getElementById("steps-list");
         var emptyState = document.getElementById("empty-state");
@@ -908,8 +963,7 @@
 
         document.getElementById("sidebar").classList.add("visible");
         document.getElementById("open-sidebar-btn").classList.remove("visible");
-        document.getElementById("start-label").textContent = data.start_address || "Current location";
-        document.getElementById("end-label").textContent = data.end_address || "Destination";
+        updateRouteChain(data, selectedRoute);
         document.getElementById("route-duration").textContent = selectedRoute.duration_min + " min";
         document.getElementById("route-distance").textContent = selectedRoute.distance_km + " km";
         document.getElementById("update-time").textContent =

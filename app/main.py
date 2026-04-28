@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import sys
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, List, Optional
@@ -94,6 +95,8 @@ app.mount("/", mcp_app)
 
 VIEW_URI = "ui://trafficly/map.html"
 MAP_HTML_PATH = Path(__file__).parent / "map.html"
+ROUTE_CACHE_TTL_SECONDS = 3600
+CACHE_SCHEMA_VERSION = 1
 MAP_RESOURCE_CSP = ResourceCSP(
     resource_domains=[
         "https://unpkg.com",
@@ -135,6 +138,79 @@ def _lat_lng(location: dict[str, Any]) -> dict[str, Any]:
     return location.get("latLng", {}) if isinstance(location, dict) else {}
 
 
+def _stable_route_key(start_address: str, end_address: str, stops: list[str]) -> str:
+    identity = "|".join(
+        [
+            start_address.lower().strip(),
+            end_address.lower().strip(),
+            ",".join(stop.lower().strip() for stop in stops),
+        ]
+    )
+    return "route:" + hashlib.md5(identity.encode()).hexdigest()
+
+
+def _route_cache_envelope(
+    route_data: dict[str, Any],
+    start_address: str,
+    end_address: str,
+    stops: list[str],
+    departure_time: str | None,
+    detail_level: str | None,
+) -> dict[str, Any]:
+    now = int(time.time())
+    trafficly_meta = route_data.get("_trafficly", {}) if isinstance(route_data, dict) else {}
+    return {
+        "schema_version": CACHE_SCHEMA_VERSION,
+        "created_at": now,
+        "expires_at": now + ROUTE_CACHE_TTL_SECONDS,
+        "request": {
+            "start_address": start_address,
+            "end_address": end_address,
+            "intermediate_stops": stops,
+            "raw_departure_time": departure_time,
+            "resolved_departure_time": trafficly_meta.get("resolved_departure_time"),
+            "timezone": trafficly_meta.get("timezone"),
+            "detail_level": detail_level,
+        },
+        "route_data": route_data,
+    }
+
+
+def _unwrap_cached_route(
+    cached_value: str,
+    fallback_start_address: str,
+    fallback_end_address: str,
+    fallback_detail_level: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    cached_data = json.loads(cached_value)
+    if isinstance(cached_data, dict) and "route_data" in cached_data:
+        request = cached_data.get("request", {})
+        return cached_data.get("route_data", {}), {
+            "start_address": request.get("start_address", fallback_start_address),
+            "end_address": request.get("end_address", fallback_end_address),
+            "intermediate_stops": request.get("intermediate_stops", []),
+            "raw_departure_time": request.get("raw_departure_time"),
+            "resolved_departure_time": request.get("resolved_departure_time"),
+            "timezone": request.get("timezone"),
+            "detail_level": request.get("detail_level", fallback_detail_level),
+            "cached_schema_version": cached_data.get("schema_version"),
+            "created_at": cached_data.get("created_at"),
+            "expires_at": cached_data.get("expires_at"),
+        }
+
+    trafficly_meta = cached_data.get("_trafficly", {}) if isinstance(cached_data, dict) else {}
+    return cached_data, {
+        "start_address": fallback_start_address,
+        "end_address": fallback_end_address,
+        "intermediate_stops": [],
+        "raw_departure_time": trafficly_meta.get("raw_departure_time"),
+        "resolved_departure_time": trafficly_meta.get("resolved_departure_time"),
+        "timezone": trafficly_meta.get("timezone"),
+        "detail_level": fallback_detail_level,
+        "cached_schema_version": 0,
+    }
+
+
 def _point_payload(location: dict[str, Any], label: str = "") -> dict[str, Any]:
     lat_lng = _lat_lng(location)
     return {
@@ -144,11 +220,16 @@ def _point_payload(location: dict[str, Any], label: str = "") -> dict[str, Any]:
     }
 
 
+def _stop_label(stop_labels: list[str], index: int) -> str:
+    return stop_labels[index] if 0 <= index < len(stop_labels) else f"Stop {index + 1}"
+
+
 def _normalize_route_option(
     route: dict[str, Any],
     index: int,
     start_address: str,
     end_address: str,
+    stop_labels: list[str],
     detail_level: str,
 ) -> dict[str, Any]:
     legs = route.get("legs", []) if isinstance(route, dict) else []
@@ -164,11 +245,11 @@ def _normalize_route_option(
     for leg_index, leg in enumerate(legs):
         leg_start = _point_payload(
             leg.get("startLocation", {}),
-            start_address if leg_index == 0 else f"Stop {leg_index}",
+            start_address if leg_index == 0 else _stop_label(stop_labels, leg_index - 1),
         )
         leg_end = _point_payload(
             leg.get("endLocation", {}),
-            end_address if leg_index == len(legs) - 1 else f"Stop {leg_index + 1}",
+            end_address if leg_index == len(legs) - 1 else _stop_label(stop_labels, leg_index),
         )
         leg_summaries.append(
             {
@@ -223,20 +304,23 @@ def _normalize_route_option(
 
 def _normalize_route_payload(
     route_data: dict[str, Any],
-    start_address: str,
-    end_address: str,
+    request_meta: dict[str, Any],
     detail_level: str,
 ) -> dict[str, Any]:
     routes = route_data.get("routes", []) if isinstance(route_data, dict) else []
+    start_address = request_meta.get("start_address", "")
+    end_address = request_meta.get("end_address", "")
+    stop_labels = request_meta.get("intermediate_stops", []) or []
     normalized_routes = [
-        _normalize_route_option(route, index, start_address, end_address, detail_level)
+        _normalize_route_option(route, index, start_address, end_address, stop_labels, detail_level)
         for index, route in enumerate(routes)
     ]
     best = normalized_routes[0] if normalized_routes else _normalize_route_option(
-        {}, 0, start_address, end_address, detail_level
+        {}, 0, start_address, end_address, stop_labels, detail_level
     )
 
     return {
+        "request": request_meta,
         "start_address": start_address,
         "end_address": end_address,
         "selected_route_index": 0,
@@ -283,28 +367,31 @@ async def get_route_info(
     Args:
         start_address: Starting point e.g. "Victoria Island, Lagos"
         end_address: Destination e.g. "Ikeja, Lagos"
-        intermediate_stops: Optional ordered list of intermediate stops
+        intermediate_stops: Optional ordered list of named intermediate stops.
+            Use specific place names when available, e.g. "Union Bank, Marina, Lagos".
         departure_time: "now" or a time like "2:30PM"
         detail_level: "summary" for overview, "detailed" for turn-by-turn
     """
     stops = intermediate_stops or []
-    key = "route:" + hashlib.md5(
-        (
-            f"{start_address.lower().strip()}|{end_address.lower().strip()}|"
-            f"{departure_time}|{','.join(stops).lower().strip()}"
-        ).encode()
-    ).hexdigest()
+    key = _stable_route_key(start_address, end_address, stops)
 
     cached_route = await upstash_redis.base_redis_client.get(key)
     if cached_route:
         logger.info("[TOOL] get_route_info | %s -> %s (cached)", start_address, end_address)
-        route_data = json.loads(cached_route)
     else:
         logger.info("[TOOL] get_route_info | %s -> %s", start_address, end_address)
 
         geocode_a = await my_maps_client.get_geocode(start_address)
         geocode_b = await my_maps_client.get_geocode(end_address)
-        geocoded_stops = [await my_maps_client.get_geocode(stop) for stop in stops]
+        geocoded_stops = []
+        successful_stops = []
+        for stop in stops:
+            geocoded_stop = await my_maps_client.get_geocode(stop)
+            if geocoded_stop:
+                geocoded_stops.append(geocoded_stop)
+                successful_stops.append(stop)
+            else:
+                logger.warning("[TOOL] get_route_info | failed to geocode stop=%s", stop)
 
         route_data = await my_maps_client.calculate_route(
             geocode_a,
@@ -312,9 +399,20 @@ async def get_route_info(
             stops=geocoded_stops,
             departure_time=departure_time,
         )
-        await upstash_redis.base_redis_client.set(key, json.dumps(route_data), ex=3600)
+        envelope = _route_cache_envelope(
+            route_data=route_data,
+            start_address=start_address,
+            end_address=end_address,
+            stops=successful_stops,
+            departure_time=departure_time,
+            detail_level=detail_level,
+        )
+        await upstash_redis.base_redis_client.setex(
+            key, ROUTE_CACHE_TTL_SECONDS, json.dumps(envelope)
+        )
+        ttl = await upstash_redis.base_redis_client.ttl(key)
         route_count = len(route_data.get("routes", [])) if isinstance(route_data, dict) else 0
-        logger.info("[TOOL] get_route_info success | routes=%s", route_count)
+        logger.info("[TOOL] get_route_info success | routes=%s ttl=%s", route_count, ttl)
 
     guidance = (
         "Present detailed turn-by-turn directions: maneuvers, street names, distances per step."
@@ -355,8 +453,12 @@ async def show_route_map(
     """
     cached = await upstash_redis.base_redis_client.get(route_id)
     if not cached:
+        logger.warning("[TOOL] show_route_map cache miss | route_id=%s", route_id)
         error_payload = {
-            "error": "Route expired. Please call get_route_info again.",
+            "error": (
+                "Route data was not found in cache. Please call get_route_info again "
+                "for this route, then call show_route_map with the new route_id."
+            ),
             "route_id": route_id,
         }
         return ToolResult(
@@ -373,11 +475,15 @@ async def show_route_map(
             },
         )
 
-    route_data = json.loads(cached)
+    route_data, request_meta = _unwrap_cached_route(
+        cached,
+        fallback_start_address=start_address,
+        fallback_end_address=end_address,
+        fallback_detail_level=detail_level,
+    )
     payload = _normalize_route_payload(
         route_data=route_data,
-        start_address=start_address,
-        end_address=end_address,
+        request_meta=request_meta,
         detail_level=detail_level,
     )
     summary = (
@@ -419,6 +525,9 @@ Call get_route_info with EXACTLY these arguments:
 - intermediate_stops: {stops_arg}
 - departure_time: "{departure_time}"
 - detail_level: "{detail_level}"
+
+If the user mentions a business, landmark, or errand at a stop, preserve the full named stop
+instead of shortening it. Example: use "Union Bank, Marina, Lagos", not just "Marina".
 
 Do NOT proceed until you have the tool response.
 

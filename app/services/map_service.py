@@ -1,11 +1,12 @@
 import requests
 import httpx
 import json
-import asyncio
+import re
 from urllib.parse import quote, quote_plus
 from typing import List, Tuple, Optional
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import time
 
 
 
@@ -128,7 +129,7 @@ class Map_client():
         """
         lat, lng = location
         location_fragment = quote_plus(f"{lat},{lng}")
-        timestamp = int(asyncio.get_event_loop().time()) #current time in seconds since epoch
+        timestamp = int(time.time()) # current Unix epoch time in seconds
         url = f"{self.timezone_base_url}?location={location_fragment}&timestamp={timestamp}&key={self.api_key}"
         
         try:
@@ -237,26 +238,27 @@ class Map_client():
         tz = await self.get_timezone(origin)
         tz_info = ZoneInfo(tz)
 
+        raw_departure_time = departure_time
         if departure_time == "now":
             dt = datetime.now(tz_info) + timedelta(minutes=2)
 
         else:
-            try:
-                # handle "8:00pm", "20:00", "8:30 AM" style inputs
-                today = datetime.now(tz_info).date()
-                parsed_time = datetime.strptime(departure_time.strip().upper(), "%I:%M%p").time()  # e.g "8:00PM"
-                dt = datetime.combine(today, parsed_time, tzinfo=tz_info) + timedelta(minutes=2)
-            except ValueError:
+            normalized_departure_time = re.sub(r"\s+", "", departure_time.strip().upper())
+            today = datetime.now(tz_info).date()
+            dt = None
+            for time_format in ("%I:%M%p", "%H:%M"):
                 try:
-                    # fallback: try 24hr format e.g "20:00"
-                    today = datetime.now(tz_info).date()
-                    parsed_time = datetime.strptime(departure_time.strip(), "%H:%M").time()
+                    parsed_time = datetime.strptime(normalized_departure_time, time_format).time()
                     dt = datetime.combine(today, parsed_time, tzinfo=tz_info) + timedelta(minutes=2)
+                    break
                 except ValueError:
-                    print(f"Invalid departure time: {departure_time}. Defaulting to now.")
-                    dt = datetime.now(tz_info) + timedelta(minutes=2)
+                    continue
+            if dt is None:
+                print(f"Invalid departure time: {raw_departure_time}. Defaulting to now.")
+                dt = datetime.now(tz_info) + timedelta(minutes=2)
 
         departure_time = dt.isoformat()        
+        print(f"Resolved departure time: raw={raw_departure_time!r}, resolved={departure_time}")
         #construct the request body
         body = {
                 "origin": 
@@ -323,7 +325,13 @@ class Map_client():
         response = await self.client.post(self.route_base_url, headers=headers, json=body)
         if response.status_code == 200:
             print(response)
-            return response.json()
+            data = response.json()
+            data["_trafficly"] = {
+                "raw_departure_time": raw_departure_time,
+                "resolved_departure_time": departure_time,
+                "timezone": tz,
+            }
+            return data
         else:
             print(f"Error calculating route: {response.status_code} - {response.text}")
             return None
