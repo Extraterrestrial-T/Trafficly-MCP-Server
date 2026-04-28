@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="color-scheme" content="dark">
-  <title>Trafficly</title>
+  <meta name="color-scheme" content="light">
+  <title>Trafficly - Smart Routing</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     *, *::before, *::after {
@@ -14,94 +14,269 @@
     }
 
     :root {
-      --bg: #0f1117;
-      --surface: #1a1d2e;
-      --border: #2d3148;
-      --accent: #3b82f6;
-      --accent-dark: #1d4ed8;
-      --danger: #dc2626;
-      --warning: #f59e0b;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
+      --blue: #1a73e8;
+      --blue-strong: #1558c0;
+      --red: #dc2626;
+      --amber: #f59e0b;
+      --text: #202124;
+      --muted: #70757a;
+      --border: #dadce0;
+      --surface: #ffffff;
+      --surface-soft: #f8fafd;
+      --map-bg: #eef2f7;
+      --shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
     }
 
     html, body {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: var(--bg);
+      background: var(--map-bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Google Sans", Roboto, Arial, sans-serif;
     }
 
-    #shell {
-      display: flex;
-      flex-direction: column;
-      width: 100vw;
-      height: 100vh;
+    #map {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      background: var(--map-bg);
     }
 
-    #header {
+    #sidebar {
+      position: absolute;
+      top: 12px;
+      bottom: 12px;
+      left: 12px;
+      z-index: 1000;
       display: none;
-      flex-shrink: 0;
-      align-items: center;
-      gap: 12px;
-      height: 52px;
-      padding: 0 16px;
+      width: min(380px, calc(100vw - 24px));
+      overflow: hidden;
+      flex-direction: column;
+      border-radius: 8px;
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow);
     }
 
-    #header.visible {
+    #sidebar.visible {
       display: flex;
     }
 
-    #logo {
+    #route-header {
       flex-shrink: 0;
-      color: var(--accent);
-      font-size: 15px;
-      font-weight: 700;
-      white-space: nowrap;
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
     }
 
-    #route-label {
-      flex: 1;
-      overflow: hidden;
+    #route-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    #route-title {
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    #close-btn {
+      display: inline-flex;
+      width: 32px;
+      height: 32px;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
       color: var(--muted);
-      font-size: 12px;
+      cursor: pointer;
+    }
+
+    #close-btn:hover {
+      background: #f1f3f4;
+      color: var(--text);
+    }
+
+    .route-point {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 9px;
+      color: #3c4043;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .route-point span:last-child {
+      overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    #stats {
+    .point-dot {
       flex-shrink: 0;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: var(--border);
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .point-dot.origin {
+      background: var(--blue);
+    }
+
+    .point-dot.dest {
+      background: var(--red);
+    }
+
+    #route-connector {
+      height: 16px;
+      margin-left: 3px;
+      border-left: 1px dashed #bdc1c6;
+    }
+
+    #metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .metric-card {
+      min-width: 0;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .metric-card.duration {
+      background: #e8f0fe;
+    }
+
+    .metric-label {
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .metric-card.duration .metric-label {
+      color: var(--blue);
+    }
+
+    .metric-value {
+      overflow: hidden;
       color: var(--text);
-      font-size: 12px;
+      font-size: 20px;
       font-weight: 600;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    #map {
+    .metric-card.duration .metric-value {
+      color: #174ea6;
+    }
+
+    #directions-container {
       flex: 1;
-      width: 100%;
       min-height: 0;
-      background: #111;
+      overflow-y: auto;
+      background: var(--surface);
+    }
+
+    #empty-state {
+      padding: 32px 24px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.2s ease;
+    }
+
+    .step-item:hover {
+      background: #f8f9fa;
+    }
+
+    .step-index {
+      display: flex;
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+      border-radius: 50%;
+      background: #f1f3f4;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .step-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .step-instruction {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .step-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .step-maneuver {
+      color: var(--blue);
+      font-weight: 500;
+      text-transform: lowercase;
+    }
+
+    #route-footer {
+      display: flex;
+      flex-shrink: 0;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+      background: #f8f9fa;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     #loading {
       position: absolute;
       inset: 0;
-      z-index: 9999;
+      z-index: 2000;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 14px;
-      background: var(--bg);
-      transition: opacity 0.3s ease;
+      background: rgba(248, 250, 253, 0.96);
+      transition: opacity 0.25s ease;
     }
 
     #loading.hidden {
@@ -112,8 +287,8 @@
     .spinner {
       width: 32px;
       height: 32px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
+      border: 3px solid #dfe3eb;
+      border-top-color: var(--blue);
       border-radius: 50%;
       animation: spin 0.9s linear infinite;
     }
@@ -123,60 +298,84 @@
     }
 
     #loading-text {
-      max-width: 280px;
+      max-width: 300px;
       color: var(--muted);
       font-size: 13px;
       line-height: 1.4;
       text-align: center;
     }
 
-    #steps-drawer {
-      position: absolute;
-      right: 0;
-      bottom: 0;
-      left: 0;
-      z-index: 800;
-      display: none;
-      max-height: 38%;
-      padding: 10px 0 16px;
-      overflow-y: auto;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
     }
 
-    #steps-drawer.visible {
-      display: block;
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f1f1;
     }
 
-    .step-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 6px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      line-height: 1.35;
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      border-radius: 10px;
+      background: #c7cbd1;
     }
 
-    .step-row:last-child {
-      border-bottom: none;
+    .leaflet-control-zoom {
+      border: none !important;
+      box-shadow: var(--shadow) !important;
     }
 
-    .step-dist {
-      flex-shrink: 0;
-      width: 52px;
-      color: var(--muted);
-      text-align: right;
+    .leaflet-control-zoom a {
+      color: #3c4043 !important;
     }
 
     .leaflet-control-attribution {
-      background: rgba(15, 17, 23, 0.72) !important;
-      color: #64748b !important;
+      background: rgba(255, 255, 255, 0.72) !important;
+      color: #70757a !important;
       font-size: 9px !important;
     }
 
-    .leaflet-control-attribution a {
-      color: #64748b !important;
+    .marker-pin {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 30px;
+      height: 30px;
+      margin: -15px 0 0 -15px;
+      transform: rotate(-45deg);
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 0;
+      background: var(--blue);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    }
+
+    .marker-pin::after {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 10px;
+      height: 10px;
+      content: "";
+      border-radius: 50%;
+      background: white;
+    }
+
+    @media (max-width: 640px) {
+      #sidebar {
+        top: auto;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 42%;
+        border-radius: 16px 16px 0 0;
+      }
+
+      #route-title {
+        font-size: 18px;
+      }
+
+      .metric-value {
+        font-size: 18px;
+      }
     }
   </style>
 </head>
@@ -186,16 +385,51 @@
     <div id="loading-text">Connecting to Trafficly...</div>
   </div>
 
-  <div id="shell">
-    <div id="header">
-      <span id="logo">Trafficly</span>
-      <span id="route-label"></span>
-      <span id="stats"></span>
+  <div id="sidebar">
+    <div id="route-header">
+      <div id="route-title-row">
+        <h1 id="route-title">Your Route</h1>
+        <button id="close-btn" type="button" aria-label="Hide directions">
+          <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18 18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="route-point">
+        <span class="point-dot origin"></span>
+        <span id="start-label">Loading...</span>
+      </div>
+      <div id="route-connector"></div>
+      <div class="route-point">
+        <span class="point-dot dest"></span>
+        <span id="end-label">Loading...</span>
+      </div>
+
+      <div id="metrics">
+        <div class="metric-card duration">
+          <p class="metric-label">Duration</p>
+          <p id="route-duration" class="metric-value">--</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Distance</p>
+          <p id="route-distance" class="metric-value">--</p>
+        </div>
+      </div>
     </div>
-    <div id="map"></div>
+
+    <div id="directions-container" class="custom-scrollbar">
+      <div id="empty-state">Route directions will appear here.</div>
+      <div id="steps-list"></div>
+    </div>
+
+    <div id="route-footer">
+      <span>Trafficly Routing Engine</span>
+      <span id="update-time"></span>
+    </div>
   </div>
 
-  <div id="steps-drawer"></div>
+  <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -204,6 +438,8 @@
       "use strict";
 
       var mapInstance = null;
+      var routeLayer = null;
+      var markers = [];
       var pendingData = null;
       var leafletReady = false;
       var renderedPayloads = [];
@@ -288,37 +524,117 @@
         return pts;
       }
 
-      function formatDist(meters) {
-        return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : meters + " m";
-      }
-
       function hasUsablePoint(lat, lng) {
         return typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0);
       }
 
-      function renderMap(data) {
-        var header = document.getElementById("header");
-        header.classList.add("visible");
-        document.getElementById("route-label").textContent =
-          data.start_address + " -> " + data.end_address;
-        document.getElementById("stats").textContent =
-          data.distance_km + " km | " + data.duration_min + " min";
+      function formatDist(meters) {
+        return meters >= 1000 ? (meters / 1000).toFixed(1) + " km" : meters + " m";
+      }
 
-        if (mapInstance) {
-          mapInstance.remove();
-          mapInstance = null;
-        }
+      function displayManeuver(maneuver) {
+        if (!maneuver) return "";
+        return String(maneuver).replace(/_/g, " ").toLowerCase();
+      }
 
+      function markerIcon(color) {
+        return L.divIcon({
+          className: "custom-div-icon",
+          html: "<div class='marker-pin' style='background:" + color + "'></div>",
+          iconSize: [30, 42],
+          iconAnchor: [15, 42]
+        });
+      }
+
+      function initMap() {
+        if (mapInstance || typeof L === "undefined") return;
         mapInstance = L.map("map", {
           zoomControl: false,
           attributionControl: true
-        });
+        }).setView([0, 0], 2);
 
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
           attribution: "&copy; <a href='https://carto.com/'>CARTO</a>",
           subdomains: "abcd",
-          maxZoom: 19
+          maxZoom: 20
         }).addTo(mapInstance);
+
+        L.control.zoom({ position: "bottomright" }).addTo(mapInstance);
+      }
+
+      function clearRoute() {
+        if (routeLayer) {
+          mapInstance.removeLayer(routeLayer);
+          routeLayer = null;
+        }
+        markers.forEach(function (marker) {
+          mapInstance.removeLayer(marker);
+        });
+        markers = [];
+      }
+
+      function addMarker(lat, lng, label, color) {
+        if (!hasUsablePoint(lat, lng)) return;
+        var marker = L.marker([lat, lng], { icon: markerIcon(color) }).addTo(mapInstance);
+        if (label) marker.bindPopup("<b>" + label + "</b>");
+        markers.push(marker);
+      }
+
+      function updateSteps(data) {
+        var stepsContainer = document.getElementById("steps-list");
+        var emptyState = document.getElementById("empty-state");
+        stepsContainer.innerHTML = "";
+
+        if (!Array.isArray(data.steps) || data.steps.length === 0) {
+          emptyState.style.display = "block";
+          return;
+        }
+
+        emptyState.style.display = "none";
+        data.steps.forEach(function (step, index) {
+          var row = document.createElement("div");
+          var badge = document.createElement("span");
+          var copy = document.createElement("div");
+          var instruction = document.createElement("p");
+          var meta = document.createElement("div");
+          var distance = document.createElement("span");
+          var maneuver = document.createElement("span");
+
+          row.className = "step-item";
+          badge.className = "step-index";
+          copy.className = "step-copy";
+          instruction.className = "step-instruction";
+          meta.className = "step-meta";
+          maneuver.className = "step-maneuver";
+
+          badge.textContent = String(index + 1);
+          instruction.textContent = step.instruction || "Continue on route";
+          distance.textContent = formatDist(step.distance_m || 0);
+          maneuver.textContent = displayManeuver(step.maneuver);
+
+          meta.appendChild(distance);
+          meta.appendChild(maneuver);
+          copy.appendChild(instruction);
+          copy.appendChild(meta);
+          row.appendChild(badge);
+          row.appendChild(copy);
+          stepsContainer.appendChild(row);
+        });
+      }
+
+      function renderMap(data) {
+        initMap();
+        if (!mapInstance) return;
+
+        document.getElementById("sidebar").classList.add("visible");
+        document.getElementById("start-label").textContent = data.start_address || "Current location";
+        document.getElementById("end-label").textContent = data.end_address || "Destination";
+        document.getElementById("route-duration").textContent = data.duration_min + " min";
+        document.getElementById("route-distance").textContent = data.distance_km + " km";
+        document.getElementById("update-time").textContent =
+          "Updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        clearRoute();
 
         var coords = [];
         if (data.encoded_polyline) {
@@ -335,81 +651,37 @@
           return;
         }
 
-        var routeLine = L.polyline(coords, {
-          color: "#3b82f6",
-          weight: 5,
-          opacity: 0.85,
+        routeLayer = L.polyline(coords, {
+          color: "#1a73e8",
+          weight: 6,
+          opacity: 0.88,
           lineJoin: "round"
         }).addTo(mapInstance);
 
-        var iconStyle = "width:14px;height:14px;border-radius:50%;border:2px solid #fff;";
-        var originIcon = L.divIcon({
-          html: "<div style='" + iconStyle + "background:#1d4ed8'></div>",
-          className: "",
-          iconSize: [14, 14],
-          iconAnchor: [7, 7]
-        });
-        var destIcon = L.divIcon({
-          html: "<div style='" + iconStyle + "background:#dc2626'></div>",
-          className: "",
-          iconSize: [14, 14],
-          iconAnchor: [7, 7]
-        });
-
-        if (hasUsablePoint(data.origin_lat, data.origin_lng)) {
-          L.marker([data.origin_lat, data.origin_lng], { icon: originIcon })
-            .bindTooltip(data.start_address, { direction: "top", sticky: false })
-            .addTo(mapInstance);
-        }
-        if (hasUsablePoint(data.dest_lat, data.dest_lng)) {
-          L.marker([data.dest_lat, data.dest_lng], { icon: destIcon })
-            .bindTooltip(data.end_address, { direction: "top", sticky: false })
-            .addTo(mapInstance);
-        }
+        addMarker(data.origin_lat, data.origin_lng, data.start_address, "#1a73e8");
+        addMarker(data.dest_lat, data.dest_lng, data.end_address, "#dc2626");
 
         if (Array.isArray(data.waypoints)) {
-          data.waypoints.forEach(function (wp) {
-            if (wp && hasUsablePoint(wp.latitude, wp.longitude)) {
-              L.circleMarker([wp.latitude, wp.longitude], {
-                radius: 5,
-                color: "#f59e0b",
-                fillColor: "#f59e0b",
-                fillOpacity: 1
-              }).addTo(mapInstance);
+          data.waypoints.forEach(function (wp, index) {
+            if (wp) {
+              addMarker(wp.latitude, wp.longitude, "Stop " + (index + 1), "#f59e0b");
             }
           });
         }
 
-        mapInstance.fitBounds(routeLine.getBounds(), { padding: [32, 32] });
+        mapInstance.fitBounds(routeLayer.getBounds(), { padding: [64, 64] });
         mapInstance.invalidateSize();
         setTimeout(function () {
           if (mapInstance) mapInstance.invalidateSize();
         }, 400);
 
-        var drawer = document.getElementById("steps-drawer");
-        drawer.innerHTML = "";
-        drawer.classList.remove("visible");
-        if (data.detail_level === "detailed" && Array.isArray(data.steps) && data.steps.length > 0) {
-          data.steps.forEach(function (step) {
-            var row = document.createElement("div");
-            var dist = document.createElement("span");
-            var text = document.createElement("span");
-            row.className = "step-row";
-            dist.className = "step-dist";
-            dist.textContent = formatDist(step.distance_m || 0);
-            text.textContent = step.instruction || "Continue";
-            row.appendChild(dist);
-            row.appendChild(text);
-            drawer.appendChild(row);
-          });
-          drawer.classList.add("visible");
-        }
+        updateSteps(data);
 
         var loading = document.getElementById("loading");
         loading.classList.add("hidden");
         setTimeout(function () {
           loading.style.display = "none";
-        }, 350);
+        }, 260);
       }
 
       function tryRender() {
@@ -428,9 +700,15 @@
       };
 
       document.addEventListener("DOMContentLoaded", function () {
+        var closeBtn = document.getElementById("close-btn");
+        closeBtn.addEventListener("click", function () {
+          document.getElementById("sidebar").classList.remove("visible");
+        });
+
         function checkLeaflet() {
           if (typeof L !== "undefined") {
             leafletReady = true;
+            initMap();
             tryRender();
           } else {
             setTimeout(checkLeaflet, 50);
