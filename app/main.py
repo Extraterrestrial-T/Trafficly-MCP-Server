@@ -22,6 +22,7 @@ from fastmcp.server.auth.providers.clerk import ClerkProvider
 from fastmcp.server.context import Context
 from fastmcp.tools import ToolResult
 from mcp import types
+from mcp.server.auth.middleware.auth_context import get_access_token
 import secrets
 from tenacity import retry, stop_after_attempt, wait_exponential
 from uber_rides.auth import AuthorizationCodeGrant
@@ -131,10 +132,14 @@ async def callback(request: Request):
     try:
         session = await asyncio.to_thread(auth_flow.get_session, str(request.url))
         credentials = serialize_oauth_credentials(session.oauth2credential)
-        client_id = state_record["client_id"]
-        await upstash_redis.oauth_uber_store.put(f"token:{client_id}", credentials)
+        user_key = state_record["client_id"]
+        await upstash_redis.oauth_uber_store.put(f"token:{user_key}", credentials)
         await upstash_redis.oauth_uber_store.delete(f"state:{state}")
-        logger.info("[UBER] callback success | client_id_present=%s", bool(client_id))
+        logger.info(
+            "[UBER] callback success | user_key_source=%s user_key_hash=%s",
+            state_record.get("user_key_source", "unknown"),
+            _identity_digest(user_key),
+        )
     except Exception:
         logger.exception("[UBER] callback token exchange failed")
         return HTMLResponse(
@@ -469,13 +474,44 @@ def _payload_keys(payload: Any) -> list[str]:
     return sorted(payload.keys()) if isinstance(payload, dict) else []
 
 
-async def _persist_refreshed_uber_credentials(client_id: str, result: Any) -> Any:
+def _identity_digest(value: str | None) -> str:
+    if not value:
+        return "none"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _uber_user_key(ctx: Context) -> tuple[str | None, str]:
+    access_token = get_access_token()
+    claims = getattr(access_token, "claims", {}) if access_token else {}
+    if isinstance(claims, dict):
+        for claim_name in ("sub", "user_id", "clerk_user_id"):
+            claim_value = claims.get(claim_name)
+            if claim_value:
+                return str(claim_value), f"access_token.claims.{claim_name}"
+
+    token_client_id = getattr(access_token, "client_id", None) if access_token else None
+    if token_client_id:
+        return str(token_client_id), "access_token.client_id"
+
+    if ctx.client_id:
+        return str(ctx.client_id), "ctx.client_id"
+
+    try:
+        return f"session:{ctx.session_id}", "ctx.session_id"
+    except RuntimeError:
+        return None, "missing"
+
+
+async def _persist_refreshed_uber_credentials(user_key: str, result: Any) -> Any:
     if isinstance(result, dict) and isinstance(result.get("_oauth_credentials"), dict):
         await upstash_redis.oauth_uber_store.put(
-            f"token:{client_id}",
+            f"token:{user_key}",
             result["_oauth_credentials"],
         )
-        logger.debug("[UBER] refreshed credentials persisted | client_id_present=%s", bool(client_id))
+        logger.debug(
+            "[UBER] refreshed credentials persisted | user_key_hash=%s",
+            _identity_digest(user_key),
+        )
     return _strip_internal_fields(result)
 
 
@@ -574,18 +610,19 @@ async def Uber_tool(
     Continue to Uber button. Otherwise it returns structured Uber data for
     the requested intent.
     """
-    client_id = ctx.client_id
-    if not client_id:
-        logger.warning("[UBER] tool rejected | missing ctx.client_id")
+    user_key, user_key_source = _uber_user_key(ctx)
+    if not user_key:
+        logger.warning("[UBER] tool rejected | missing user identity source=%s", user_key_source)
         return _uber_error("Trafficly could not identify the current user for Uber authorization.")
 
     normalized_intent = intent.lower().strip()
-    uber_raw = await upstash_redis.oauth_uber_store.get(f"token:{client_id}") or None
+    uber_raw = await upstash_redis.oauth_uber_store.get(f"token:{user_key}") or None
     logger.info(
-        "[UBER] tool call | intent=%s token_present=%s client_id_present=%s",
+        "[UBER] tool call | intent=%s token_present=%s user_key_source=%s user_key_hash=%s",
         normalized_intent,
         bool(uber_raw),
-        bool(client_id),
+        user_key_source,
+        _identity_digest(user_key),
     )
 
     if not uber_raw:
@@ -601,10 +638,18 @@ async def Uber_tool(
         oauth_url = auth_flow.get_authorization_url()
         await upstash_redis.oauth_uber_store.put(
             f"state:{state}",
-            {"client_id": client_id, "created_at": int(time.time())},
+            {
+                "client_id": user_key,
+                "user_key_source": user_key_source,
+                "created_at": int(time.time()),
+            },
             ttl=600,
         )
-        logger.info("[UBER] auth required | state_created=true")
+        logger.info(
+            "[UBER] auth required | state_created=true user_key_source=%s user_key_hash=%s",
+            user_key_source,
+            _identity_digest(user_key),
+        )
         return _uber_tool_result(
             {
                 "intent": "auth_required",
@@ -628,7 +673,7 @@ async def Uber_tool(
     try:
         if normalized_intent in {"estimate", "price_estimate", "ride_estimate"}:
             result = await get_ride_estimate(start, end, oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(client_id, result)
+            result = await _persist_refreshed_uber_credentials(user_key, result)
             data = _normalize_uber_estimate_result(result)
             payload = {
                 "intent": "price_estimate",
@@ -650,7 +695,7 @@ async def Uber_tool(
                     data={"ride_id": ride_id},
                 )
             result = await book_ride(start, end, oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(client_id, result)
+            result = await _persist_refreshed_uber_credentials(user_key, result)
             ride_id = result.get("request_id") or result.get("ride_id") or result.get("id")
             if ride_id:
                 await ctx.set_state("ride_id", ride_id)
@@ -672,7 +717,7 @@ async def Uber_tool(
             if not ride_id:
                 return _uber_error("There is no active Uber ride request in this session.")
             result = await get_ride_status(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(client_id, result)
+            result = await _persist_refreshed_uber_credentials(user_key, result)
             logger.info("[UBER] status result | keys=%s", _payload_keys(result))
             return _uber_tool_result(
                 {
@@ -686,7 +731,7 @@ async def Uber_tool(
             if not ride_id:
                 return _uber_error("There is no active Uber ride request to map in this session.")
             result = await get_ride_map(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(client_id, result)
+            result = await _persist_refreshed_uber_credentials(user_key, result)
             logger.info(
                 "[UBER] map result | keys=%s map_url_present=%s",
                 _payload_keys(result),
@@ -704,7 +749,7 @@ async def Uber_tool(
             if not ride_id:
                 return _uber_error("There is no active Uber ride request to cancel in this session.")
             result = await cancel_ride(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(client_id, result)
+            result = await _persist_refreshed_uber_credentials(user_key, result)
             await ctx.set_state("ride_id", None)
             logger.info("[UBER] cancel result | keys=%s", _payload_keys(result))
             return _uber_tool_result(
