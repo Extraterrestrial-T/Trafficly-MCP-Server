@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Trafficly Uber</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-soft: #f1f5f9;
+      --ink: #111827;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --blue: #1a73e8;
+      --blue-dark: #185abc;
+      --green: #15803d;
+      --amber: #b45309;
+      --red: #b91c1c;
+      --shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 360px;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      padding: 14px;
+    }
+
+    button,
+    a {
+      font: inherit;
+    }
+
+    .shell {
+      display: flex;
+      flex-direction: column;
+      width: min(720px, 100%);
+      min-height: 332px;
+      max-height: calc(100vh - 28px);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12);
+      flex: 0 0 auto;
+    }
+
+    .brand-subtitle {
+      margin: 3px 0 0 18px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      max-width: 46%;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status.auth {
+      background: #eff6ff;
+      color: var(--blue-dark);
+    }
+
+    .status.success {
+      background: #ecfdf5;
+      color: var(--green);
+    }
+
+    .status.warning {
+      background: #fffbeb;
+      color: var(--amber);
+    }
+
+    .status.error {
+      background: #fef2f2;
+      color: var(--red);
+    }
+
+    .content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .empty,
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+    }
+
+    .empty {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .panel {
+      padding: 16px;
+    }
+
+    .panel + .panel {
+      margin-top: 12px;
+    }
+
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .auth-card {
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+      border-radius: 10px;
+      border: 1px solid #bfdbfe;
+      background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+    }
+
+    .auth-card h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .auth-card p {
+      margin: 0;
+      color: #334155;
+    }
+
+    .primary-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      width: fit-content;
+      padding: 0 16px;
+      border-radius: 8px;
+      background: #000000;
+      color: #ffffff;
+      font-weight: 800;
+      text-decoration: none;
+      transition: transform 120ms ease, background 120ms ease;
+    }
+
+    .primary-action:hover {
+      background: #1f2937;
+      transform: translateY(-1px);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .card {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .card-title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .card-title strong {
+      min-width: 0;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .price {
+      color: var(--blue-dark);
+      font-size: 16px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .facts {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .fact {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-top: 1px solid #eef2f7;
+      padding-top: 6px;
+    }
+
+    .fact:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .fact span:last-child {
+      color: var(--ink);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .route {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .route-point {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      color: #334155;
+      font-size: 13px;
+    }
+
+    .pin {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .pin.pickup {
+      background: var(--blue);
+    }
+
+    .pin.dropoff {
+      background: var(--red);
+    }
+
+    .route-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .json-details {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dbeafe;
+      font: 12px/1.45 Consolas, "Liberation Mono", monospace;
+      overflow: auto;
+      max-height: 180px;
+      white-space: pre-wrap;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .secondary-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--ink);
+      font-weight: 800;
+      text-decoration: none;
+    }
+
+    .map-frame-wrap {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface-soft);
+      min-height: 260px;
+    }
+
+    .map-frame {
+      display: block;
+      width: 100%;
+      min-height: 300px;
+      height: min(52vh, 420px);
+      border: 0;
+      background: #ffffff;
+    }
+
+    @media (max-width: 520px) {
+      body {
+        padding: 10px;
+      }
+
+      html,
+      body {
+        min-height: 330px;
+      }
+
+      .shell {
+        min-height: 310px;
+        max-height: calc(100vh - 20px);
+      }
+
+      .header {
+        padding: 12px;
+      }
+
+      .brand-subtitle {
+        display: none;
+      }
+
+      .status {
+        max-width: 42%;
+      }
+
+      .content {
+        padding: 12px;
+      }
+
+      .auth-card {
+        padding: 16px;
+      }
+
+      .primary-action {
+        width: 100%;
+      }
+
+      .secondary-action {
+        width: 100%;
+      }
+
+      .map-frame {
+        min-height: 240px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" aria-live="polite">
+    <header class="header">
+      <div class="brand">
+        <h1 class="brand-title"><span class="brand-dot"></span>Trafficly Uber</h1>
+        <p class="brand-subtitle" id="subtitle">Ride actions and estimates</p>
+      </div>
+      <div class="status" id="status-pill">Waiting</div>
+    </header>
+
+    <section class="content" id="content">
+      <div class="empty">
+        <div>
+          <strong>Waiting for Uber result</strong>
+          <span>Trafficly will show authorization, estimates, or ride status here.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var statusPill = document.getElementById("status-pill");
+      var subtitle = document.getElementById("subtitle");
+      var content = document.getElementById("content");
+
+      function asText(value, fallback) {
+        if (value === null || typeof value === "undefined" || value === "") return fallback || "";
+        return String(value);
+      }
+
+      function escapeHtml(value) {
+        return asText(value).replace(/[&<>"']/g, function (char) {
+          return {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;"
+          }[char];
+        });
+      }
+
+      function setStatus(text, kind) {
+        statusPill.textContent = text;
+        statusPill.className = "status" + (kind ? " " + kind : "");
+      }
+
+      function getNested(object, names) {
+        for (var i = 0; i < names.length; i += 1) {
+          if (object && typeof object[names[i]] !== "undefined") return object[names[i]];
+        }
+        return undefined;
+      }
+
+      function formatPlace(value) {
+        if (value === null || typeof value === "undefined" || value === "") return "";
+        if (typeof value === "string" || typeof value === "number") return String(value);
+
+        if (typeof value === "object") {
+          var label = getNested(value, ["label", "address", "name", "formatted_address"]);
+          if (label) return String(label);
+
+          var lat = getNested(value, ["latitude", "lat"]);
+          var lng = getNested(value, ["longitude", "lng", "lon"]);
+          if (typeof lat !== "undefined" && typeof lng !== "undefined") {
+            return Number(lat).toFixed(5) + ", " + Number(lng).toFixed(5);
+          }
+        }
+
+        return String(value);
+      }
+
+      function parseJsonMaybe(value) {
+        if (typeof value !== "string") return null;
+        try {
+          return JSON.parse(value);
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function extractTextJson(result) {
+        var contentItems = result && result.content;
+        if (!Array.isArray(contentItems)) return null;
+
+        for (var i = 0; i < contentItems.length; i += 1) {
+          var item = contentItems[i];
+          var text = item && (item.text || item.content);
+          var parsed = parseJsonMaybe(text);
+          if (parsed) return parsed;
+        }
+        return null;
+      }
+
+      function normalizePayload(result) {
+        if (!result) return null;
+        if (result.structuredContent) return result.structuredContent;
+        if (result.structured_content) return result.structured_content;
+
+        var parsedText = extractTextJson(result);
+        if (parsedText) return parsedText;
+
+        if (result.toolOutput) return normalizePayload(result.toolOutput);
+        return result;
+      }
+
+      function findAuthUrl(payload) {
+        return getNested(payload, ["uber_auth_url", "auth_url", "authorization_url", "connect_url"]);
+      }
+
+      function isHttpUrl(value) {
+        return typeof value === "string" && /^https?:\/\//i.test(value);
+      }
+
+      function findMapUrl(value, depth) {
+        if (!value || depth > 5) return "";
+        if (isHttpUrl(value)) return value;
+
+        if (Array.isArray(value)) {
+          for (var i = 0; i < value.length; i += 1) {
+            var fromArray = findMapUrl(value[i], depth + 1);
+            if (fromArray) return fromArray;
+          }
+          return "";
+        }
+
+        if (typeof value !== "object") return "";
+
+        var directKeys = ["map_url", "mapUrl", "href", "url"];
+        for (var j = 0; j < directKeys.length; j += 1) {
+          var direct = value[directKeys[j]];
+          if (isHttpUrl(direct)) return direct;
+        }
+
+        for (var key in value) {
+          if (Object.prototype.hasOwnProperty.call(value, key)) {
+            var nested = findMapUrl(value[key], depth + 1);
+            if (nested) return nested;
+          }
+        }
+        return "";
+      }
+
+      function renderAuth(payload) {
+        var authUrl = findAuthUrl(payload);
+        setStatus("Connect Uber", "auth");
+        subtitle.textContent = "Authorization required";
+        content.innerHTML = [
+          '<div class="auth-card">',
+          '<h2>Connect your Uber account</h2>',
+          '<p>' + escapeHtml(payload.message || "Trafficly needs permission to access Uber for ride estimates and bookings. Complete authorization, then return to chat.") + '</p>',
+          '<a class="primary-action" href="' + escapeHtml(authUrl) + '" target="_blank" rel="noopener noreferrer">Continue to Uber</a>',
+          '</div>'
+        ].join("");
+      }
+
+      function formatEstimatePrice(item) {
+        var estimate = getNested(item, ["estimate", "price", "fare", "display_price"]);
+        if (estimate) return estimate;
+
+        var low = getNested(item, ["low_estimate", "low"]);
+        var high = getNested(item, ["high_estimate", "high"]);
+        var currency = getNested(item, ["currency_code", "currency"]) || "";
+        if (typeof low !== "undefined" && typeof high !== "undefined") {
+          return [currency, low, "-", high].filter(Boolean).join(" ");
+        }
+        return "Estimate";
+      }
+
+      function renderRoute(data) {
+        var pickup = getNested(data, ["pickup", "start_address", "origin", "pickup_address"]);
+        var dropoff = getNested(data, ["dropoff", "end_address", "destination", "dropoff_address"]);
+        if (!pickup && !dropoff) return "";
+
+        return [
+          '<div class="route">',
+          pickup ? '<div class="route-point"><span class="pin pickup"></span><span class="route-label">' + escapeHtml(formatPlace(pickup)) + '</span></div>' : '',
+          dropoff ? '<div class="route-point"><span class="pin dropoff"></span><span class="route-label">' + escapeHtml(formatPlace(dropoff)) + '</span></div>' : '',
+          '</div>'
+        ].join("");
+      }
+
+      function renderFacts(item, names) {
+        return names.map(function (entry) {
+          var value = getNested(item, entry.keys);
+          if (value === null || typeof value === "undefined" || value === "") return "";
+          return '<div class="fact"><span>' + escapeHtml(entry.label) + '</span><span>' + escapeHtml(value) + '</span></div>';
+        }).join("");
+      }
+
+      function renderEstimateCards(estimates) {
+        if (!Array.isArray(estimates) || estimates.length === 0) {
+          return '<div class="panel"><p>No Uber estimates were returned.</p></div>';
+        }
+
+        return '<div class="grid">' + estimates.map(function (item) {
+          var product = getNested(item, ["display_name", "localized_display_name", "product_name", "name"]) || "Uber";
+          var facts = renderFacts(item, [
+            { label: "Pickup", keys: ["pickup_estimate", "pickup_time", "eta"] },
+            { label: "Duration", keys: ["duration", "duration_min", "duration_minutes"] },
+            { label: "Distance", keys: ["distance", "distance_km", "distance_miles"] },
+            { label: "Surge", keys: ["surge_multiplier", "surge"] }
+          ]);
+
+          return [
+            '<article class="card">',
+            '<div class="card-title"><strong>' + escapeHtml(product) + '</strong><span class="price">' + escapeHtml(formatEstimatePrice(item)) + '</span></div>',
+            facts ? '<div class="facts">' + facts + '</div>' : '<p>Estimate details unavailable.</p>',
+            '</article>'
+          ].join("");
+        }).join("") + '</div>';
+      }
+
+      function renderPriceEstimate(payload) {
+        var data = payload.data || payload;
+        var estimates = data.estimates || data.prices || data.price_estimates || [];
+        setStatus("Estimates", "success");
+        subtitle.textContent = "Uber price options";
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.message || "Uber price estimates") + '</h2>',
+          '<p>Choose an option in chat if you want to continue toward booking.</p>',
+          renderRoute(data),
+          renderEstimateCards(estimates),
+          '</div>'
+        ].join("");
+      }
+
+      function renderRideEstimate(payload) {
+        var data = payload.data || payload;
+        setStatus("Ride Estimate", "success");
+        subtitle.textContent = "Prepared Uber ride";
+
+        var facts = renderFacts(data, [
+          { label: "Product", keys: ["product_name", "display_name", "product_id"] },
+          { label: "Fare", keys: ["fare", "estimate", "price", "display_price"] },
+          { label: "Pickup ETA", keys: ["pickup_estimate", "pickup_time", "eta"] },
+          { label: "Trip time", keys: ["duration", "duration_min", "duration_minutes"] }
+        ]);
+
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.message || "Uber ride estimate") + '</h2>',
+          renderRoute(data),
+          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
+          '</div>'
+        ].join("");
+      }
+
+      function renderRideRecord(payload, statusText) {
+        var data = payload.data || payload;
+        var isBooked = payload.intent === "ride_booked";
+        setStatus(statusText || (isBooked ? "Booked" : "Ride Status"), isBooked ? "success" : "auth");
+        subtitle.textContent = isBooked ? "Uber ride created" : "Uber ride status";
+
+        var facts = renderFacts(data, [
+          { label: "Ride ID", keys: ["ride_id", "request_id", "id"] },
+          { label: "Status", keys: ["status", "ride_status"] },
+          { label: "Driver", keys: ["driver_name", "driver"] },
+          { label: "Vehicle", keys: ["vehicle", "vehicle_name", "car"] },
+          { label: "Plate", keys: ["license_plate", "plate"] },
+          { label: "ETA", keys: ["eta", "pickup_estimate"] }
+        ]);
+
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.message || (isBooked ? "Your Uber ride is booked" : "Uber ride status")) + '</h2>',
+          renderRoute(data),
+          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
+          '</div>'
+        ].join("");
+      }
+
+      function renderRideMap(payload) {
+        var data = payload.data || payload;
+        var mapUrl = findMapUrl(data, 0);
+        setStatus("Live Map", "success");
+        subtitle.textContent = "Uber ride map";
+
+        if (!mapUrl) {
+          renderError({
+            title: "Uber map unavailable",
+            message: payload.message || "Uber returned map details, but Trafficly could not find a map URL in the response.",
+            received: data
+          });
+          return;
+        }
+
+        var facts = renderFacts(data, [
+          { label: "Ride ID", keys: ["ride_id", "request_id", "id"] },
+          { label: "Status", keys: ["status", "ride_status"] }
+        ]);
+
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.message || "Uber live ride map") + '</h2>',
+          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
+          '<div class="actions"><a class="secondary-action" href="' + escapeHtml(mapUrl) + '" target="_blank" rel="noopener noreferrer">Open Map</a></div>',
+          '<div class="map-frame-wrap"><iframe class="map-frame" src="' + escapeHtml(mapUrl) + '" title="Uber live ride map" referrerpolicy="no-referrer"></iframe></div>',
+          '</div>'
+        ].join("");
+      }
+
+      function renderError(payload) {
+        setStatus("Needs Attention", "error");
+        subtitle.textContent = "Uber action could not be completed";
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.title || "Uber request failed") + '</h2>',
+          '<p>' + escapeHtml(payload.message || payload.error || "Trafficly could not read this Uber result.") + '</p>',
+          '<div class="json-details">' + escapeHtml(JSON.stringify(payload, null, 2)) + '</div>',
+          '</div>'
+        ].join("");
+      }
+
+      function renderPayload(payload) {
+        if (!payload || typeof payload !== "object") {
+          renderError({ message: "Trafficly did not receive a structured Uber result." });
+          return;
+        }
+
+        if (findAuthUrl(payload)) {
+          renderAuth(payload);
+          return;
+        }
+
+        switch (payload.intent) {
+          case "auth_required":
+            renderAuth(payload);
+            break;
+          case "price_estimate":
+            renderPriceEstimate(payload);
+            break;
+          case "ride_estimate":
+            renderRideEstimate(payload);
+            break;
+          case "ride_booked":
+            renderRideRecord(payload, "Booked");
+            break;
+          case "ride_status":
+            renderRideRecord(payload, "Status");
+            break;
+          case "ride_map":
+            renderRideMap(payload);
+            break;
+          case "error":
+            renderError(payload);
+            break;
+          default:
+            if (findMapUrl(payload.data || payload, 0)) {
+              renderRideMap(payload);
+            } else if (payload.estimates || payload.prices || payload.price_estimates) {
+              renderPriceEstimate(payload);
+            } else {
+              renderError({
+                message: payload.message || "Trafficly received an Uber result, but it did not include a supported intent.",
+                received: payload
+              });
+            }
+        }
+      }
+
+      window.TrafficlyUber = {
+        receiveToolResult: function (result, source) {
+          console.log("[trafficly-uber] Received from " + source + ":", result);
+          renderPayload(normalizePayload(result));
+        }
+      };
+    })();
+  </script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      window.TrafficlyFallbackBridge = {
+        connect: function () {
+          window.addEventListener("message", function (event) {
+            var data = event.data || {};
+
+            if (data.type === "tool_result" || data.type === "ui/notifications/tool-result") {
+              window.TrafficlyUber.receiveToolResult(data.result || data.params || data, "postMessage");
+            }
+
+            if (data.method === "ui/notifications/tool-result") {
+              window.TrafficlyUber.receiveToolResult(data.params || data, "json-rpc");
+            }
+          });
+        }
+      };
+
+      window.TrafficlyFallbackBridge.connect();
+    })();
+  </script>
+
+  <script type="module">
+    (async () => {
+      try {
+        const module = await import("https://unpkg.com/@modelcontextprotocol/ext-apps@0.4.0/app-with-deps");
+        const app = new module.App({ name: "trafficly-uber", version: "1.0.0" });
+        app.ontoolresult = (result) => {
+          window.TrafficlyUber.receiveToolResult(result, "ext-apps");
+        };
+        await app.connect();
+      } catch (error) {
+        console.warn("[trafficly-uber] ext-apps bridge unavailable; inline fallback remains active.", error);
+      }
+    })();
+  </script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      function useOpenAIToolOutput() {
+        var openai = window.openai;
+        if (!openai || typeof openai.toolOutput === "undefined") return;
+
+        try {
+          if (openai.toolOutput && typeof openai.toolOutput.then === "function") {
+            openai.toolOutput.then(function (toolOutput) {
+              window.TrafficlyUber.receiveToolResult(toolOutput, "openai-toolOutput");
+            });
+          } else {
+            window.TrafficlyUber.receiveToolResult(openai.toolOutput, "openai-toolOutput");
+          }
+        } catch (error) {
+          console.warn("[trafficly-uber] window.openai.toolOutput failed.", error);
+        }
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", useOpenAIToolOutput);
+      } else {
+        useOpenAIToolOutput();
+      }
+    })();
+  </script>
+</body>
+</html>

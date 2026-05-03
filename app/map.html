@@ -253,6 +253,8 @@
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
       background: var(--surface);
     }
 
@@ -476,15 +478,49 @@
     }
 
     @media (max-width: 640px) {
+      html, body, #map {
+        min-height: 640px;
+      }
+
       #sidebar {
-        top: auto;
+        top: max(12px, env(safe-area-inset-top));
         right: 0;
-        bottom: 0;
+        bottom: env(safe-area-inset-bottom);
         left: 0;
         width: 100%;
-        height: 42%;
-        min-height: 360px;
+        height: auto;
+        max-height: calc(100vh - max(12px, env(safe-area-inset-top)) - env(safe-area-inset-bottom));
+        min-height: min(560px, calc(100vh - max(12px, env(safe-area-inset-top)) - env(safe-area-inset-bottom)));
         border-radius: 16px 16px 0 0;
+      }
+
+      #route-header {
+        padding: 13px 14px 12px;
+      }
+
+      #route-title-row {
+        margin-bottom: 10px;
+      }
+
+      .route-point {
+        font-size: 14px;
+      }
+
+      #route-connector {
+        height: 11px;
+      }
+
+      #metrics {
+        gap: 9px;
+        margin-top: 12px;
+      }
+
+      .metric-card {
+        padding: 10px;
+      }
+
+      #route-options {
+        margin-top: 10px;
       }
 
       #open-sidebar-btn {
@@ -500,11 +536,40 @@
       .metric-value {
         font-size: 18px;
       }
+
+      .step-item {
+        gap: 12px;
+        padding: 14px 15px;
+      }
+
+      .step-index {
+        width: 28px;
+        height: 28px;
+        font-size: 13px;
+      }
+
+      .step-instruction {
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .step-meta {
+        margin-top: 7px;
+        font-size: 13px;
+      }
+
+      #directions-container {
+        min-height: 180px;
+      }
+
+      #route-footer {
+        padding: 11px 14px calc(11px + env(safe-area-inset-bottom));
+      }
     }
 
     @media (max-height: 520px) {
       html, body, #map {
-        min-height: 480px;
+        min-height: 560px;
       }
 
       #sidebar {
@@ -512,7 +577,7 @@
         bottom: 8px;
         left: 8px;
         max-height: calc(100vh - 16px);
-        min-height: 360px;
+        min-height: min(460px, calc(100vh - 16px));
       }
 
       #route-header {
@@ -661,6 +726,7 @@
         if (renderedPayloads.indexOf(fingerprint) !== -1) return;
         renderedPayloads.push(fingerprint);
         if (renderedPayloads.length > 3) renderedPayloads.shift();
+        selectedRouteIndex = typeof payload.selected_route_index === "number" ? payload.selected_route_index : 0;
         pendingData = payload;
         tryRender();
       }
@@ -860,8 +926,7 @@
           button.appendChild(label);
           button.appendChild(meta);
           button.addEventListener("click", function () {
-            selectedRouteIndex = index;
-            renderMap(currentPayload, selectedRouteIndex);
+            renderMap(currentPayload, index);
           });
           options.appendChild(button);
         });
@@ -909,18 +974,35 @@
         stopPoints.classList.add("visible");
       }
 
-      function updateSteps(route) {
+      function resolveRouteSteps(data, route, routeIndex) {
+        if (Array.isArray(route.steps) && route.steps.length > 0) return route.steps;
+        if (
+          data &&
+          Array.isArray(data.routes) &&
+          data.routes[routeIndex] &&
+          Array.isArray(data.routes[routeIndex].steps)
+        ) {
+          return data.routes[routeIndex].steps;
+        }
+        if (routeIndex === 0 && data && Array.isArray(data.steps)) return data.steps;
+        return [];
+      }
+
+      function updateSteps(data, route, routeIndex) {
         var stepsContainer = document.getElementById("steps-list");
         var emptyState = document.getElementById("empty-state");
+        var directionsContainer = document.getElementById("directions-container");
+        var steps = resolveRouteSteps(data, route, routeIndex);
         stepsContainer.innerHTML = "";
+        if (directionsContainer) directionsContainer.scrollTop = 0;
 
-        if (!Array.isArray(route.steps) || route.steps.length === 0) {
+        if (!Array.isArray(steps) || steps.length === 0) {
           emptyState.style.display = "block";
           return;
         }
 
         emptyState.style.display = "none";
-        route.steps.forEach(function (step, index) {
+        steps.forEach(function (step, index) {
           var row = document.createElement("div");
           var badge = document.createElement("span");
           var copy = document.createElement("div");
@@ -957,7 +1039,8 @@
 
         currentPayload = data;
         var routes = getRouteOptions(data);
-        selectedRouteIndex = Math.max(0, Math.min(nextSelectedRouteIndex || 0, routes.length - 1));
+        var requestedRouteIndex = typeof nextSelectedRouteIndex === "number" ? nextSelectedRouteIndex : selectedRouteIndex;
+        selectedRouteIndex = Math.max(0, Math.min(requestedRouteIndex, routes.length - 1));
         var selectedRoute = routes[selectedRouteIndex] || routes[0];
 
         document.getElementById("sidebar").classList.add("visible");
@@ -989,8 +1072,7 @@
             lineJoin: "round"
           }).addTo(mapInstance);
           layer.on("click", function () {
-            selectedRouteIndex = index;
-            renderMap(currentPayload, selectedRouteIndex);
+            renderMap(currentPayload, index);
           });
           if (isSelected) {
             selectedLayer = layer;
@@ -1019,7 +1101,7 @@
           if (mapInstance) mapInstance.invalidateSize();
         }, 400);
 
-        updateSteps(selectedRoute);
+        updateSteps(data, selectedRoute, selectedRouteIndex);
 
         var loading = document.getElementById("loading");
         loading.classList.add("hidden");
@@ -1036,7 +1118,7 @@
         }
         var data = pendingData;
         pendingData = null;
-        renderMap(data);
+        renderMap(data, typeof data.selected_route_index === "number" ? data.selected_route_index : 0);
       }
 
       window.TrafficlyMap = {
