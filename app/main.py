@@ -23,9 +23,8 @@ from mcp import types
 from tenacity import retry, stop_after_attempt, wait_exponential
 from app.services.upstash_redis import UpstashRedis
 from app.services.uber_service import (
-    UberGuestRidesError,
-    get_guest_trip_estimates,
-    get_guest_trip_status,
+    UberDeepLinkError,
+    build_uber_deeplink,
 )
 load_dotenv()
 
@@ -114,6 +113,11 @@ MAP_RESOURCE_CSP = ResourceCSP(
 )
 UBER_RESOURCE_CSP = ResourceCSP(
     resource_domains=["https://unpkg.com"],
+    frame_domains=[
+        "https://m.uber.com",
+        "https://uber.com",
+        "https://www.uber.com",
+    ],
 )
 
 
@@ -404,88 +408,63 @@ def _uber_error(message: str, **extra: Any) -> ToolResult:
 async def Uber_tool(
     start: Optional[Tuple[float, float]] = None,
     end: Optional[Tuple[float, float]] = None,
-    intent: str = "price_estimate",
-    request_id: Optional[str] = None,
+    intent: str = "ride_link",
+    start_label: Optional[str] = None,
+    end_label: Optional[str] = None,
+    start_address: Optional[str] = None,
+    end_address: Optional[str] = None,
+    stops: Optional[List[Tuple[float, float]]] = None,
+    stop_labels: Optional[List[str]] = None,
+    product_id: Optional[str] = None,
     ctx: Context = CurrentContext(),
 ) -> ToolResult:
-    """Estimate or inspect Uber Guest Rides trips.
+    """Build an Uber handoff link for a prefilled ride request.
 
-    Guest Rides uses Trafficly's app credentials, not per-rider credentials. Booking is
-    intentionally gated in this pass; if the user asks to book, return the
-    missing guest/product details needed before creating a trip.
+    Uber shows prices, product options, payment, and final booking after the
+    user opens the link. Trafficly does not call Uber APIs for this tool.
     """
     normalized_intent = intent.lower().strip()
-    logger.info("[UBER] tool call | intent=%s request_id_present=%s", normalized_intent, bool(request_id))
-    try:
-        if normalized_intent in {"estimate", "price_estimate", "ride_estimate"}:
-            if not start or not end:
-                return _uber_error(
-                    "Trafficly needs pickup and dropoff coordinates to get Uber estimates.",
-                    data={"missing": ["start", "end"]},
-                )
-            data = await get_guest_trip_estimates(start, end)
-            logger.info("[UBER] estimate result | estimate_count=%s", len(data.get("estimates", [])))
-            payload = {
-                "intent": "price_estimate",
-                "message": "Here are the Uber ride estimates Trafficly found.",
-                "data": data,
-                "raw": data.get("raw", {}),
-            }
-            return _uber_tool_result(payload)
-
-        if normalized_intent in {"book", "request", "create_trip", "ride_booked"}:
-            return _uber_tool_result(
-                {
-                    "intent": "booking_requires_details",
-                    "message": "Trafficly needs a few details before creating a Guest Ride.",
-                    "data": {
-                        "missing": [
-                            "guest first name",
-                            "guest last name",
-                            "guest phone number",
-                            "selected product_id from an estimate",
-                            "explicit booking confirmation",
-                        ],
-                        "pickup": {"latitude": start[0], "longitude": start[1]} if start else None,
-                        "dropoff": {"latitude": end[0], "longitude": end[1]} if end else None,
-                    },
-                }
-            )
-
-        if normalized_intent in {"status", "ride_status", "map", "ride_map", "tracking"}:
-            ride_id = request_id or await ctx.get_state("uber_request_id")
-            if not ride_id:
-                return _uber_error(
-                    "Trafficly needs an Uber request_id to retrieve ride status or tracking.",
-                    data={"missing": ["request_id"]},
-                )
-            data = await get_guest_trip_status(request_id=ride_id)
-            logger.info(
-                "[UBER] status result | keys=%s tracking_url_present=%s",
-                _payload_keys(data),
-                bool(data.get("tracking_url")),
-            )
-            return _uber_tool_result(
-                {
-                    "intent": "ride_status",
-                    "message": "Here is the latest Uber Guest Ride status.",
-                    "data": data,
-                    "tracking_url": data.get("tracking_url"),
-                    "raw": data.get("raw", {}),
-                }
-            )
-
+    logger.info("[UBER] tool call | intent=%s stops=%s", normalized_intent, len(stops or []))
+    if normalized_intent not in {"ride_link", "open", "estimate", "price_estimate", "book", "request"}:
         return _uber_error(
-            "Unsupported Uber intent. Use price_estimate, ride_status, or book.",
+            "Unsupported Uber intent. Use ride_link, open, estimate, or book.",
             data={"intent": intent},
         )
-    except UberGuestRidesError as exc:
-        logger.exception("[TOOL] Uber Guest Rides request failed | intent=%s status=%s", normalized_intent, exc.status_code)
+
+    if not start or not end:
         return _uber_error(
-            "Trafficly could not complete the Uber Guest Rides request.",
+            "Trafficly needs pickup and dropoff coordinates to build an Uber link.",
+            data={"missing": ["start", "end"]},
+        )
+
+    try:
+        data = build_uber_deeplink(
+            start=start,
+            end=end,
+            start_label=start_label,
+            end_label=end_label,
+            start_address=start_address,
+            end_address=end_address,
+            stops=stops,
+            stop_labels=stop_labels,
+            product_id=product_id,
+        )
+        payload = {
+            "intent": "uber_handoff",
+            "message": "Open Uber to see prices, choose a ride option, and complete booking.",
+            "uber_url": data["uber_url"],
+            "data": data,
+            "pickup": data["pickup"],
+            "dropoffs": data["dropoffs"],
+            "url_style": data["url_style"],
+        }
+        return _uber_tool_result(payload)
+    except UberDeepLinkError as exc:
+        logger.exception("[TOOL] Uber link build failed | intent=%s", normalized_intent)
+        return _uber_error(
+            "Trafficly could not build the Uber handoff link.",
             error=str(exc),
-            status_code=exc.status_code,
-            data={"intent": intent, "uber_error": exc.payload},
+            data={"intent": intent},
         )
     except Exception as exc:
         logger.exception("[TOOL] Uber_tool failed | intent=%s", normalized_intent)

@@ -16,7 +16,6 @@
       --blue: #1a73e8;
       --blue-dark: #185abc;
       --green: #15803d;
-      --amber: #b45309;
       --red: #b91c1c;
       --shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
     }
@@ -28,7 +27,7 @@
     html,
     body {
       width: 100%;
-      min-height: 360px;
+      min-height: 520px;
       margin: 0;
       background: var(--bg);
       color: var(--ink);
@@ -43,7 +42,6 @@
       padding: 14px;
     }
 
-    button,
     a {
       font: inherit;
     }
@@ -51,8 +49,8 @@
     .shell {
       display: flex;
       flex-direction: column;
-      width: min(720px, 100%);
-      min-height: 332px;
+      width: min(780px, 100%);
+      min-height: 492px;
       max-height: calc(100vh - 28px);
       background: var(--surface);
       border: 1px solid var(--line);
@@ -81,7 +79,7 @@
       gap: 8px;
       margin: 0;
       font-size: 15px;
-      font-weight: 700;
+      font-weight: 800;
       letter-spacing: 0;
     }
 
@@ -113,25 +111,15 @@
       background: var(--surface-soft);
       color: var(--muted);
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .status.auth {
-      background: #eff6ff;
-      color: var(--blue-dark);
-    }
-
     .status.success {
       background: #ecfdf5;
       color: var(--green);
-    }
-
-    .status.warning {
-      background: #fffbeb;
-      color: var(--amber);
     }
 
     .status.error {
@@ -154,7 +142,7 @@
     }
 
     .empty {
-      min-height: 220px;
+      min-height: 320px;
       display: grid;
       place-items: center;
       padding: 24px;
@@ -170,11 +158,7 @@
     }
 
     .panel {
-      padding: 16px;
-    }
-
-    .panel + .panel {
-      margin-top: 12px;
+      padding: 14px;
     }
 
     .panel h2 {
@@ -189,87 +173,34 @@
       color: var(--muted);
     }
 
-    .primary-action {
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .primary-action,
+    .secondary-action {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 42px;
-      width: fit-content;
-      padding: 0 16px;
+      min-height: 40px;
+      padding: 0 15px;
       border-radius: 8px;
-      background: #000000;
-      color: #ffffff;
       font-weight: 800;
       text-decoration: none;
-      transition: transform 120ms ease, background 120ms ease;
     }
 
-    .primary-action:hover {
-      background: #1f2937;
-      transform: translateY(-1px);
+    .primary-action {
+      background: #000000;
+      color: #ffffff;
     }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
-      margin-top: 14px;
-    }
-
-    .card {
-      padding: 12px;
+    .secondary-action {
       border: 1px solid var(--line);
-      border-radius: 8px;
       background: #ffffff;
-    }
-
-    .card-title {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .card-title strong {
-      min-width: 0;
-      font-size: 14px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .price {
-      color: var(--blue-dark);
-      font-size: 16px;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
-    .facts {
-      display: grid;
-      gap: 6px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .fact {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      border-top: 1px solid #eef2f7;
-      padding-top: 6px;
-    }
-
-    .fact:first-child {
-      border-top: 0;
-      padding-top: 0;
-    }
-
-    .fact span:last-child {
       color: var(--ink);
-      font-weight: 700;
-      text-align: right;
     }
 
     .route {
@@ -312,6 +243,24 @@
       white-space: nowrap;
     }
 
+    .frame-wrap {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface-soft);
+      min-height: 300px;
+    }
+
+    .uber-frame {
+      display: block;
+      width: 100%;
+      min-height: 360px;
+      height: min(58vh, 520px);
+      border: 0;
+      background: #ffffff;
+    }
+
     .json-details {
       margin-top: 12px;
       padding: 10px;
@@ -324,27 +273,6 @@
       white-space: pre-wrap;
     }
 
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .secondary-action {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 38px;
-      padding: 0 14px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      color: var(--ink);
-      font-weight: 800;
-      text-decoration: none;
-    }
-
     @media (max-width: 520px) {
       body {
         padding: 10px;
@@ -352,11 +280,11 @@
 
       html,
       body {
-        min-height: 330px;
+        min-height: 470px;
       }
 
       .shell {
-        min-height: 310px;
+        min-height: 450px;
         max-height: calc(100vh - 20px);
       }
 
@@ -376,14 +304,14 @@
         padding: 12px;
       }
 
-      .primary-action {
-        width: 100%;
-      }
-
+      .primary-action,
       .secondary-action {
         width: 100%;
       }
 
+      .uber-frame {
+        min-height: 320px;
+      }
     }
   </style>
 </head>
@@ -392,7 +320,7 @@
     <header class="header">
       <div class="brand">
         <h1 class="brand-title"><span class="brand-dot"></span>Trafficly Uber</h1>
-        <p class="brand-subtitle" id="subtitle">Ride actions and estimates</p>
+        <p class="brand-subtitle" id="subtitle">Open a prefilled ride request in Uber</p>
       </div>
       <div class="status" id="status-pill">Waiting</div>
     </header>
@@ -400,8 +328,8 @@
     <section class="content" id="content">
       <div class="empty">
         <div>
-          <strong>Waiting for Uber result</strong>
-          <span>Trafficly will show estimates, booking requirements, or ride status here.</span>
+          <strong>Waiting for Uber link</strong>
+          <span>Trafficly will show a prefilled Uber ride handoff here.</span>
         </div>
       </div>
     </section>
@@ -449,7 +377,9 @@
         if (typeof value === "string" || typeof value === "number") return String(value);
 
         if (typeof value === "object") {
-          var label = getNested(value, ["label", "address", "name", "formatted_address"]);
+          var label = getNested(value, ["addressLine1", "label", "address", "name", "formatted_address"]);
+          var address = getNested(value, ["addressLine2"]);
+          if (label && address && label !== address) return String(label) + " - " + String(address);
           if (label) return String(label);
 
           var lat = getNested(value, ["latitude", "lat"]);
@@ -496,213 +426,60 @@
         return result;
       }
 
-      function isHttpUrl(value) {
-        return typeof value === "string" && /^https?:\/\//i.test(value);
-      }
-
-      function findMapUrl(value, depth) {
-        if (!value || depth > 5) return "";
-        if (isHttpUrl(value)) return value;
-
-        if (Array.isArray(value)) {
-          for (var i = 0; i < value.length; i += 1) {
-            var fromArray = findMapUrl(value[i], depth + 1);
-            if (fromArray) return fromArray;
-          }
-          return "";
-        }
-
-        if (typeof value !== "object") return "";
-
-        var directKeys = ["tracking_url", "rider_tracking_url", "map_url", "mapUrl", "href", "url"];
-        for (var j = 0; j < directKeys.length; j += 1) {
-          var direct = value[directKeys[j]];
-          if (isHttpUrl(direct)) return direct;
-        }
-
-        for (var key in value) {
-          if (Object.prototype.hasOwnProperty.call(value, key)) {
-            var nested = findMapUrl(value[key], depth + 1);
-            if (nested) return nested;
-          }
-        }
-        return "";
-      }
-
-      function formatEstimatePrice(item) {
-        var estimate = getNested(item, ["estimate", "price", "fare", "display_price"]);
-        if (estimate) return estimate;
-
-        var low = getNested(item, ["low_estimate", "low"]);
-        var high = getNested(item, ["high_estimate", "high"]);
-        var currency = getNested(item, ["currency_code", "currency"]) || "";
-        if (typeof low !== "undefined" && typeof high !== "undefined") {
-          return [currency, low, "-", high].filter(Boolean).join(" ");
-        }
-        return "Estimate";
+      function findUberUrl(payload) {
+        return (
+          payload.uber_url ||
+          getNested(payload, ["data"]) && payload.data.uber_url ||
+          getNested(payload, ["url"]) ||
+          ""
+        );
       }
 
       function renderRoute(data) {
-        var pickup = getNested(data, ["pickup", "start_address", "origin", "pickup_address"]);
-        var dropoff = getNested(data, ["dropoff", "end_address", "destination", "dropoff_address"]);
-        if (!pickup && !dropoff) return "";
+        var pickup = data.pickup;
+        var dropoffs = Array.isArray(data.dropoffs) ? data.dropoffs : [];
+        var rows = [];
 
-        return [
-          '<div class="route">',
-          pickup ? '<div class="route-point"><span class="pin pickup"></span><span class="route-label">' + escapeHtml(formatPlace(pickup)) + '</span></div>' : '',
-          dropoff ? '<div class="route-point"><span class="pin dropoff"></span><span class="route-label">' + escapeHtml(formatPlace(dropoff)) + '</span></div>' : '',
-          '</div>'
-        ].join("");
-      }
-
-      function renderFacts(item, names) {
-        return names.map(function (entry) {
-          var value = getNested(item, entry.keys);
-          if (value === null || typeof value === "undefined" || value === "") return "";
-          return '<div class="fact"><span>' + escapeHtml(entry.label) + '</span><span>' + escapeHtml(value) + '</span></div>';
-        }).join("");
-      }
-
-      function renderEstimateCards(estimates) {
-        if (!Array.isArray(estimates) || estimates.length === 0) {
-          return '<div class="panel"><p>No Uber estimates were returned.</p></div>';
+        if (pickup) {
+          rows.push('<div class="route-point"><span class="pin pickup"></span><span class="route-label">' + escapeHtml(formatPlace(pickup)) + '</span></div>');
         }
+        dropoffs.forEach(function (dropoff, index) {
+          rows.push('<div class="route-point"><span class="pin dropoff"></span><span class="route-label">' + escapeHtml((index < dropoffs.length - 1 ? "Stop: " : "Dropoff: ") + formatPlace(dropoff)) + '</span></div>');
+        });
 
-        return '<div class="grid">' + estimates.map(function (item) {
-          var product = getNested(item, ["display_name", "localized_display_name", "product_name", "name"]) || "Uber";
-          var facts = renderFacts(item, [
-            { label: "Pickup", keys: ["pickup_estimate", "pickup_time", "eta"] },
-            { label: "Duration", keys: ["duration", "duration_min", "duration_minutes"] },
-            { label: "Distance", keys: ["distance", "distance_km", "distance_miles"] },
-            { label: "Surge", keys: ["surge_multiplier", "surge"] }
-          ]);
-
-          return [
-            '<article class="card">',
-            '<div class="card-title"><strong>' + escapeHtml(product) + '</strong><span class="price">' + escapeHtml(formatEstimatePrice(item)) + '</span></div>',
-            facts ? '<div class="facts">' + facts + '</div>' : '<p>Estimate details unavailable.</p>',
-            '</article>'
-          ].join("");
-        }).join("") + '</div>';
+        return rows.length ? '<div class="route">' + rows.join("") + '</div>' : "";
       }
 
-      function renderPriceEstimate(payload) {
+      function renderHandoff(payload) {
         var data = payload.data || payload;
-        var estimates = data.estimates || data.prices || data.price_estimates || [];
-        setStatus("Estimates", "success");
-        subtitle.textContent = "Uber price options";
-        content.innerHTML = [
-          '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "Uber price estimates") + '</h2>',
-          '<p>Choose an option in chat if you want to continue toward booking.</p>',
-          renderRoute(data),
-          renderEstimateCards(estimates),
-          '</div>'
-        ].join("");
-      }
-
-      function renderRideEstimate(payload) {
-        var data = payload.data || payload;
-        setStatus("Ride Estimate", "success");
-        subtitle.textContent = "Prepared Uber ride";
-
-        var facts = renderFacts(data, [
-          { label: "Product", keys: ["product_name", "display_name", "product_id"] },
-          { label: "Fare", keys: ["fare", "estimate", "price", "display_price"] },
-          { label: "Pickup ETA", keys: ["pickup_estimate", "pickup_time", "eta"] },
-          { label: "Trip time", keys: ["duration", "duration_min", "duration_minutes"] }
-        ]);
-
-        content.innerHTML = [
-          '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "Uber ride estimate") + '</h2>',
-          renderRoute(data),
-          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
-          '</div>'
-        ].join("");
-      }
-
-      function renderRideRecord(payload, statusText) {
-        var data = payload.data || payload;
-        var isBooked = payload.intent === "ride_booked";
-        setStatus(statusText || (isBooked ? "Booked" : "Ride Status"), isBooked ? "success" : "auth");
-        subtitle.textContent = isBooked ? "Uber ride created" : "Uber ride status";
-        var trackingUrl = payload.tracking_url || findMapUrl(data, 0);
-
-        var facts = renderFacts(data, [
-          { label: "Ride ID", keys: ["ride_id", "request_id", "id"] },
-          { label: "Status", keys: ["status", "ride_status"] },
-          { label: "Driver", keys: ["driver_name", "driver"] },
-          { label: "Vehicle", keys: ["vehicle", "vehicle_name", "car"] },
-          { label: "Plate", keys: ["license_plate", "plate"] },
-          { label: "ETA", keys: ["eta", "pickup_estimate"] }
-        ]);
-
-        content.innerHTML = [
-          '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || (isBooked ? "Your Uber ride is booked" : "Uber ride status")) + '</h2>',
-          renderRoute(data),
-          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
-          trackingUrl ? '<div class="actions"><a class="secondary-action" href="' + escapeHtml(trackingUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber tracking</a></div>' : '',
-          '</div>'
-        ].join("");
-      }
-
-      function renderBookingRequirements(payload) {
-        var data = payload.data || payload;
-        var missing = data.missing || payload.missing || [];
-        if (!Array.isArray(missing) || missing.length === 0) {
-          missing = ["guest first name", "guest last name", "guest phone number", "selected product", "explicit confirmation"];
-        }
-        setStatus("More Details", "warning");
-        subtitle.textContent = "Guest Ride booking requirements";
-        content.innerHTML = [
-          '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "More details needed before booking") + '</h2>',
-          '<p>Guest Rides can be created after Trafficly has the rider details and a confirmed product choice.</p>',
-          renderRoute(data),
-          '<div class="grid"><article class="card"><div class="facts">',
-          missing.map(function (item) {
-            return '<div class="fact"><span>Needed</span><span>' + escapeHtml(item) + '</span></div>';
-          }).join(""),
-          '</div></article></div>',
-          '</div>'
-        ].join("");
-      }
-
-      function renderRideMap(payload) {
-        var data = payload.data || payload;
-        var mapUrl = findMapUrl(data, 0);
-        setStatus("Tracking", "success");
-        subtitle.textContent = "Uber ride tracking";
-
-        if (!mapUrl) {
+        var uberUrl = findUberUrl(payload);
+        if (!uberUrl) {
           renderError({
-            title: "Uber tracking unavailable",
-            message: payload.message || "Uber returned ride details, but Trafficly could not find a tracking URL in the response.",
-            received: data
+            message: "Trafficly did not receive an Uber URL.",
+            received: payload
           });
           return;
         }
 
-        var facts = renderFacts(data, [
-          { label: "Ride ID", keys: ["ride_id", "request_id", "id"] },
-          { label: "Status", keys: ["status", "ride_status"] }
-        ]);
-
+        setStatus("Ready", "success");
+        subtitle.textContent = "Uber will handle pricing and booking";
         content.innerHTML = [
           '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "Uber ride tracking") + '</h2>',
-          '<p>Uber tracking links open in a new tab because Uber does not allow the live rider tracking page to be embedded.</p>',
-          facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
-          '<div class="actions"><a class="secondary-action" href="' + escapeHtml(mapUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber tracking</a></div>',
+          '<h2>' + escapeHtml(payload.message || "Open Uber to complete your ride") + '</h2>',
+          '<p>Trafficly prefilled the trip. Uber will show ride options, prices, payment, and final booking.</p>',
+          renderRoute(data),
+          '<div class="actions">',
+          '<a class="primary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber</a>',
+          '<a class="secondary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open in new tab</a>',
+          '</div>',
+          '<div class="frame-wrap"><iframe class="uber-frame" src="' + escapeHtml(uberUrl) + '" title="Uber ride handoff" referrerpolicy="no-referrer"></iframe></div>',
           '</div>'
         ].join("");
       }
 
       function renderError(payload) {
         setStatus("Needs Attention", "error");
-        subtitle.textContent = "Uber action could not be completed";
+        subtitle.textContent = "Uber link could not be created";
         content.innerHTML = [
           '<div class="panel">',
           '<h2>' + escapeHtml(payload.title || "Uber request failed") + '</h2>',
@@ -718,40 +495,20 @@
           return;
         }
 
-        switch (payload.intent) {
-          case "price_estimate":
-            renderPriceEstimate(payload);
-            break;
-          case "ride_estimate":
-            renderRideEstimate(payload);
-            break;
-          case "ride_booked":
-            renderRideRecord(payload, "Booked");
-            break;
-          case "ride_status":
-            renderRideRecord(payload, "Status");
-            break;
-          case "ride_map":
-            renderRideMap(payload);
-            break;
-          case "booking_requires_details":
-            renderBookingRequirements(payload);
-            break;
-          case "error":
-            renderError(payload);
-            break;
-          default:
-            if (findMapUrl(payload.data || payload, 0)) {
-              renderRideMap(payload);
-            } else if (payload.estimates || payload.prices || payload.price_estimates) {
-              renderPriceEstimate(payload);
-            } else {
-              renderError({
-                message: payload.message || "Trafficly received an Uber result, but it did not include a supported intent.",
-                received: payload
-              });
-            }
+        if (payload.intent === "error") {
+          renderError(payload);
+          return;
         }
+
+        if (payload.intent === "uber_handoff" || findUberUrl(payload)) {
+          renderHandoff(payload);
+          return;
+        }
+
+        renderError({
+          message: payload.message || "Trafficly received an Uber result, but it did not include a handoff URL.",
+          received: payload
+        });
       }
 
       window.TrafficlyUber = {
