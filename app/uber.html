@@ -27,7 +27,7 @@
     html,
     body {
       width: 100%;
-      min-height: 520px;
+      min-height: 760px;
       margin: 0;
       background: var(--bg);
       color: var(--ink);
@@ -39,7 +39,7 @@
       display: flex;
       align-items: stretch;
       justify-content: center;
-      padding: 14px;
+      padding: 8px;
     }
 
     a {
@@ -49,9 +49,9 @@
     .shell {
       display: flex;
       flex-direction: column;
-      width: min(780px, 100%);
-      min-height: 492px;
-      max-height: calc(100vh - 28px);
+      width: min(1040px, 100%);
+      min-height: 744px;
+      max-height: calc(100vh - 16px);
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -129,9 +129,11 @@
 
     .content {
       flex: 1;
+      display: flex;
+      flex-direction: column;
       min-height: 0;
       overflow-y: auto;
-      padding: 16px;
+      padding: 8px;
     }
 
     .empty,
@@ -158,12 +160,16 @@
     }
 
     .panel {
-      padding: 14px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 680px;
+      padding: 8px;
     }
 
     .panel h2 {
-      margin: 0 0 6px;
-      font-size: 18px;
+      margin: 0 0 4px;
+      font-size: 16px;
       line-height: 1.2;
       letter-spacing: 0;
     }
@@ -171,13 +177,14 @@
     .panel p {
       margin: 0;
       color: var(--muted);
+      font-size: 12px;
     }
 
     .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin: 14px 0;
+      margin: 8px 0;
     }
 
     .primary-action,
@@ -204,10 +211,11 @@
     }
 
     .route {
-      display: grid;
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
-      margin-top: 14px;
-      padding: 12px;
+      margin-top: 8px;
+      padding: 8px;
       border-radius: 8px;
       background: var(--surface-soft);
     }
@@ -217,8 +225,9 @@
       align-items: center;
       gap: 8px;
       min-width: 0;
+      max-width: 100%;
       color: #334155;
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .pin {
@@ -244,19 +253,20 @@
     }
 
     .frame-wrap {
-      margin-top: 12px;
+      flex: 1;
+      margin-top: 8px;
       border: 1px solid var(--line);
       border-radius: 10px;
       overflow: hidden;
       background: var(--surface-soft);
-      min-height: 300px;
+      min-height: 600px;
     }
 
     .uber-frame {
       display: block;
       width: 100%;
-      min-height: 360px;
-      height: min(58vh, 520px);
+      min-height: 680px;
+      height: 72vh;
       border: 0;
       background: #ffffff;
     }
@@ -275,21 +285,21 @@
 
     @media (max-width: 520px) {
       body {
-        padding: 10px;
+        padding: 6px;
       }
 
       html,
       body {
-        min-height: 470px;
+        min-height: 680px;
       }
 
       .shell {
-        min-height: 450px;
-        max-height: calc(100vh - 20px);
+        min-height: 668px;
+        max-height: calc(100vh - 12px);
       }
 
       .header {
-        padding: 12px;
+        padding: 10px 12px;
       }
 
       .brand-subtitle {
@@ -301,7 +311,7 @@
       }
 
       .content {
-        padding: 12px;
+        padding: 6px;
       }
 
       .primary-action,
@@ -310,7 +320,7 @@
       }
 
       .uber-frame {
-        min-height: 320px;
+        min-height: 620px;
       }
     }
   </style>
@@ -465,14 +475,12 @@
         subtitle.textContent = "Uber will handle pricing and booking";
         content.innerHTML = [
           '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "Open Uber to complete your ride") + '</h2>',
-          '<p>Trafficly prefilled the trip. Uber will show ride options, prices, payment, and final booking.</p>',
-          renderRoute(data),
           '<div class="actions">',
           '<a class="primary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber</a>',
           '<a class="secondary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open in new tab</a>',
           '</div>',
           '<div class="frame-wrap"><iframe class="uber-frame" src="' + escapeHtml(uberUrl) + '" title="Uber ride handoff" referrerpolicy="no-referrer"></iframe></div>',
+          renderRoute(data),
           '</div>'
         ].join("");
       }
