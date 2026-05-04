@@ -67,12 +67,28 @@ def _guest_env() -> str:
     return "production" if env == "production" else "sandbox"
 
 
+def _auth_env() -> str:
+    env = (os.getenv("UBER_AUTH_ENV") or "production").strip().lower()
+    return "sandbox" if env == "sandbox" else "production"
+
+
 def _api_root() -> str:
     return PRODUCTION_ROOT if _guest_env() == "production" else SANDBOX_ROOT
 
 
 def _auth_url() -> str:
-    return PRODUCTION_AUTH_URL if _guest_env() == "production" else SANDBOX_AUTH_URL
+    override = os.getenv("UBER_AUTH_URL")
+    if override:
+        return override
+    return PRODUCTION_AUTH_URL if _auth_env() == "production" else SANDBOX_AUTH_URL
+
+
+def _guest_scope() -> str:
+    return os.getenv("UBER_GUEST_SCOPE", DEFAULT_SCOPE).strip()
+
+
+def _token_cache_key() -> str:
+    return f"{_auth_url()}|{_client_id()}|{_guest_scope()}"
 
 
 def _client_id() -> str:
@@ -146,21 +162,30 @@ async def _raise_for_uber_error(response: httpx.Response, label: str) -> dict[st
 
 async def get_guest_access_token() -> str:
     now = int(time.time())
-    cached_token = _token_cache.get("access_token")
-    cached_expiry = int(_token_cache.get("expires_at", 0) or 0)
+    cache_key = _token_cache_key()
+    cached = _token_cache.get(cache_key, {})
+    cached_token = cached.get("access_token") if isinstance(cached, dict) else None
+    cached_expiry = int(cached.get("expires_at", 0) or 0) if isinstance(cached, dict) else 0
     if cached_token and cached_expiry - TOKEN_REFRESH_SKEW_SECONDS > now:
         return cached_token
 
     async with httpx.AsyncClient(timeout=20) as client:
         auth_url = _auth_url()
-        logger.info("[UBER] token request | env=%s auth_host=%s", _guest_env(), auth_url.split("/oauth/", 1)[0])
+        scope = _guest_scope()
+        logger.info(
+            "[UBER] token request | api_env=%s auth_env=%s auth_host=%s scope=%s",
+            _guest_env(),
+            _auth_env(),
+            auth_url.split("/oauth/", 1)[0],
+            scope,
+        )
         response = await client.post(
             auth_url,
             data={
                 "client_id": _client_id(),
                 "client_secret": _client_secret(),
                 "grant_type": "client_credentials",
-                "scope": DEFAULT_SCOPE,
+                "scope": scope,
             },
             headers={"content-type": "application/x-www-form-urlencoded"},
         )
@@ -171,15 +196,12 @@ async def get_guest_access_token() -> str:
     if not access_token or expires_in <= 0:
         raise UberGuestRidesError("Uber token response did not include a usable access token.")
 
-    _token_cache.clear()
-    _token_cache.update(
-        {
-            "access_token": access_token,
-            "expires_at": now + expires_in,
-            "scope": payload.get("scope"),
-            "token_type": payload.get("token_type"),
-        }
-    )
+    _token_cache[cache_key] = {
+        "access_token": access_token,
+        "expires_at": now + expires_in,
+        "scope": payload.get("scope"),
+        "token_type": payload.get("token_type"),
+    }
     logger.info("[UBER] app token cached | expires_in=%s scope=%s", expires_in, payload.get("scope"))
     return access_token
 
