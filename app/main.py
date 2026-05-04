@@ -26,6 +26,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 import secrets
 from tenacity import retry, stop_after_attempt, wait_exponential
 from uber_rides.auth import AuthorizationCodeGrant
+from uber_rides.utils import auth as uber_auth_utils
 from app.services.upstash_redis import UpstashRedis
 from app.services.uber_service import (
     book_ride,
@@ -47,6 +48,10 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("trafficly")
+
+# The unmaintained uber_rides SDK still points OAuth at login.uber.com.
+# Uber's current OAuth docs require auth.uber.com for authorize/token/revoke.
+uber_auth_utils.AUTH_HOST = "auth.uber.com"
 
 
 my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))

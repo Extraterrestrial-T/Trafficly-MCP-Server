@@ -9,9 +9,13 @@ from typing import Any, Tuple
 from fastapi import HTTPException
 from uber_rides.client import UberRidesClient
 from uber_rides.session import OAuth2Credential, Session
+from uber_rides.utils import auth as uber_auth_utils
 
 
 logger = logging.getLogger("trafficly.uber")
+
+# Keep refresh/revoke paths aligned with Uber's current OAuth host.
+uber_auth_utils.AUTH_HOST = "auth.uber.com"
 
 SENSITIVE_KEYS = {
     "access_token",
