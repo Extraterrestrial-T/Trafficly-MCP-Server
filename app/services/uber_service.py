@@ -9,7 +9,8 @@ import httpx
 
 logger = logging.getLogger("trafficly.uber")
 
-AUTH_URL = "https://auth.uber.com/oauth/v2/token"
+PRODUCTION_AUTH_URL = "https://auth.uber.com/oauth/v2/token"
+SANDBOX_AUTH_URL = "https://sandbox-login.uber.com/oauth/v2/token"
 PRODUCTION_ROOT = "https://api.uber.com/v1/guests"
 SANDBOX_ROOT = "https://sandbox-api.uber.com/v1/guests"
 DEFAULT_SCOPE = "guests.trips"
@@ -68,6 +69,10 @@ def _guest_env() -> str:
 
 def _api_root() -> str:
     return PRODUCTION_ROOT if _guest_env() == "production" else SANDBOX_ROOT
+
+
+def _auth_url() -> str:
+    return PRODUCTION_AUTH_URL if _guest_env() == "production" else SANDBOX_AUTH_URL
 
 
 def _client_id() -> str:
@@ -147,8 +152,10 @@ async def get_guest_access_token() -> str:
         return cached_token
 
     async with httpx.AsyncClient(timeout=20) as client:
+        auth_url = _auth_url()
+        logger.info("[UBER] token request | env=%s auth_host=%s", _guest_env(), auth_url.split("/oauth/", 1)[0])
         response = await client.post(
-            AUTH_URL,
+            auth_url,
             data={
                 "client_id": _client_id(),
                 "client_secret": _client_secret(),
