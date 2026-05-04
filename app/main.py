@@ -421,7 +421,10 @@ async def Uber_tool(
     """Build an Uber handoff link for a prefilled ride request.
 
     Uber shows prices, product options, payment, and final booking after the
-    user opens the link. Trafficly does not call Uber APIs for this tool.
+    user opens the link. Prefer passing coordinates from the rendered route
+    payload: start=(origin_lat, origin_lng), end=(dest_lat, dest_lng), and
+    stops as coordinate tuples. If coordinates are missing, Trafficly will try
+    to geocode start_address and end_address before building the link.
     """
     normalized_intent = intent.lower().strip()
     logger.info("[UBER] tool call | intent=%s stops=%s", normalized_intent, len(stops or []))
@@ -431,10 +434,30 @@ async def Uber_tool(
             data={"intent": intent},
         )
 
+    if not start and start_address:
+        start = await my_maps_client.get_geocode(start_address)
+        logger.info("[UBER] geocoded start_address | success=%s", bool(start))
+    if not end and end_address:
+        end = await my_maps_client.get_geocode(end_address)
+        logger.info("[UBER] geocoded end_address | success=%s", bool(end))
+
     if not start or not end:
+        missing_coordinates = []
+        if not start:
+            missing_coordinates.append("start coordinates")
+        if not end:
+            missing_coordinates.append("end coordinates")
         return _uber_error(
-            "Trafficly needs pickup and dropoff coordinates to build an Uber link.",
-            data={"missing": ["start", "end"]},
+            "Trafficly needs pickup and dropoff coordinates, or geocodable start and end addresses, to build an Uber link.",
+            data={
+                "missing": missing_coordinates,
+                "received": {
+                    "start_address": start_address,
+                    "end_address": end_address,
+                    "start_label": start_label,
+                    "end_label": end_label,
+                },
+            },
         )
 
     try:
