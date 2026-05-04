@@ -189,25 +189,6 @@
       color: var(--muted);
     }
 
-    .auth-card {
-      display: grid;
-      gap: 14px;
-      padding: 20px;
-      border-radius: 10px;
-      border: 1px solid #bfdbfe;
-      background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
-    }
-
-    .auth-card h2 {
-      margin: 0;
-      font-size: 20px;
-    }
-
-    .auth-card p {
-      margin: 0;
-      color: #334155;
-    }
-
     .primary-action {
       display: inline-flex;
       align-items: center;
@@ -364,24 +345,6 @@
       text-decoration: none;
     }
 
-    .map-frame-wrap {
-      margin-top: 14px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--surface-soft);
-      min-height: 260px;
-    }
-
-    .map-frame {
-      display: block;
-      width: 100%;
-      min-height: 300px;
-      height: min(52vh, 420px);
-      border: 0;
-      background: #ffffff;
-    }
-
     @media (max-width: 520px) {
       body {
         padding: 10px;
@@ -413,10 +376,6 @@
         padding: 12px;
       }
 
-      .auth-card {
-        padding: 16px;
-      }
-
       .primary-action {
         width: 100%;
       }
@@ -425,9 +384,6 @@
         width: 100%;
       }
 
-      .map-frame {
-        min-height: 240px;
-      }
     }
   </style>
 </head>
@@ -445,7 +401,7 @@
       <div class="empty">
         <div>
           <strong>Waiting for Uber result</strong>
-          <span>Trafficly will show authorization, estimates, or ride status here.</span>
+          <span>Trafficly will show estimates, booking requirements, or ride status here.</span>
         </div>
       </div>
     </section>
@@ -540,10 +496,6 @@
         return result;
       }
 
-      function findAuthUrl(payload) {
-        return getNested(payload, ["uber_auth_url", "auth_url", "authorization_url", "connect_url"]);
-      }
-
       function isHttpUrl(value) {
         return typeof value === "string" && /^https?:\/\//i.test(value);
       }
@@ -562,7 +514,7 @@
 
         if (typeof value !== "object") return "";
 
-        var directKeys = ["map_url", "mapUrl", "href", "url"];
+        var directKeys = ["tracking_url", "rider_tracking_url", "map_url", "mapUrl", "href", "url"];
         for (var j = 0; j < directKeys.length; j += 1) {
           var direct = value[directKeys[j]];
           if (isHttpUrl(direct)) return direct;
@@ -575,19 +527,6 @@
           }
         }
         return "";
-      }
-
-      function renderAuth(payload) {
-        var authUrl = findAuthUrl(payload);
-        setStatus("Connect Uber", "auth");
-        subtitle.textContent = "Authorization required";
-        content.innerHTML = [
-          '<div class="auth-card">',
-          '<h2>Connect your Uber account</h2>',
-          '<p>' + escapeHtml(payload.message || "Trafficly needs permission to access Uber for ride estimates and bookings. Complete authorization, then return to chat.") + '</p>',
-          '<a class="primary-action" href="' + escapeHtml(authUrl) + '" target="_blank" rel="noopener noreferrer">Continue to Uber</a>',
-          '</div>'
-        ].join("");
       }
 
       function formatEstimatePrice(item) {
@@ -688,6 +627,7 @@
         var isBooked = payload.intent === "ride_booked";
         setStatus(statusText || (isBooked ? "Booked" : "Ride Status"), isBooked ? "success" : "auth");
         subtitle.textContent = isBooked ? "Uber ride created" : "Uber ride status";
+        var trackingUrl = payload.tracking_url || findMapUrl(data, 0);
 
         var facts = renderFacts(data, [
           { label: "Ride ID", keys: ["ride_id", "request_id", "id"] },
@@ -703,6 +643,29 @@
           '<h2>' + escapeHtml(payload.message || (isBooked ? "Your Uber ride is booked" : "Uber ride status")) + '</h2>',
           renderRoute(data),
           facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
+          trackingUrl ? '<div class="actions"><a class="secondary-action" href="' + escapeHtml(trackingUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber tracking</a></div>' : '',
+          '</div>'
+        ].join("");
+      }
+
+      function renderBookingRequirements(payload) {
+        var data = payload.data || payload;
+        var missing = data.missing || payload.missing || [];
+        if (!Array.isArray(missing) || missing.length === 0) {
+          missing = ["guest first name", "guest last name", "guest phone number", "selected product", "explicit confirmation"];
+        }
+        setStatus("More Details", "warning");
+        subtitle.textContent = "Guest Ride booking requirements";
+        content.innerHTML = [
+          '<div class="panel">',
+          '<h2>' + escapeHtml(payload.message || "More details needed before booking") + '</h2>',
+          '<p>Guest Rides can be created after Trafficly has the rider details and a confirmed product choice.</p>',
+          renderRoute(data),
+          '<div class="grid"><article class="card"><div class="facts">',
+          missing.map(function (item) {
+            return '<div class="fact"><span>Needed</span><span>' + escapeHtml(item) + '</span></div>';
+          }).join(""),
+          '</div></article></div>',
           '</div>'
         ].join("");
       }
@@ -710,13 +673,13 @@
       function renderRideMap(payload) {
         var data = payload.data || payload;
         var mapUrl = findMapUrl(data, 0);
-        setStatus("Live Map", "success");
-        subtitle.textContent = "Uber ride map";
+        setStatus("Tracking", "success");
+        subtitle.textContent = "Uber ride tracking";
 
         if (!mapUrl) {
           renderError({
-            title: "Uber map unavailable",
-            message: payload.message || "Uber returned map details, but Trafficly could not find a map URL in the response.",
+            title: "Uber tracking unavailable",
+            message: payload.message || "Uber returned ride details, but Trafficly could not find a tracking URL in the response.",
             received: data
           });
           return;
@@ -729,10 +692,10 @@
 
         content.innerHTML = [
           '<div class="panel">',
-          '<h2>' + escapeHtml(payload.message || "Uber live ride map") + '</h2>',
+          '<h2>' + escapeHtml(payload.message || "Uber ride tracking") + '</h2>',
+          '<p>Uber tracking links open in a new tab because Uber does not allow the live rider tracking page to be embedded.</p>',
           facts ? '<div class="grid"><article class="card"><div class="facts">' + facts + '</div></article></div>' : '',
-          '<div class="actions"><a class="secondary-action" href="' + escapeHtml(mapUrl) + '" target="_blank" rel="noopener noreferrer">Open Map</a></div>',
-          '<div class="map-frame-wrap"><iframe class="map-frame" src="' + escapeHtml(mapUrl) + '" title="Uber live ride map" referrerpolicy="no-referrer"></iframe></div>',
+          '<div class="actions"><a class="secondary-action" href="' + escapeHtml(mapUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber tracking</a></div>',
           '</div>'
         ].join("");
       }
@@ -755,15 +718,7 @@
           return;
         }
 
-        if (findAuthUrl(payload)) {
-          renderAuth(payload);
-          return;
-        }
-
         switch (payload.intent) {
-          case "auth_required":
-            renderAuth(payload);
-            break;
           case "price_estimate":
             renderPriceEstimate(payload);
             break;
@@ -778,6 +733,9 @@
             break;
           case "ride_map":
             renderRideMap(payload);
+            break;
+          case "booking_requires_details":
+            renderBookingRequirements(payload);
             break;
           case "error":
             renderError(payload);

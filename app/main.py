@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import json
 import logging
@@ -12,9 +11,8 @@ from typing import Any, List, Optional
 from typing import Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastmcp import FastMCP
 from fastmcp.apps import AppConfig, ResourceCSP
 from fastmcp.dependencies import CurrentContext
@@ -22,19 +20,12 @@ from fastmcp.server.auth.providers.clerk import ClerkProvider
 from fastmcp.server.context import Context
 from fastmcp.tools import ToolResult
 from mcp import types
-from mcp.server.auth.middleware.auth_context import get_access_token
-import secrets
 from tenacity import retry, stop_after_attempt, wait_exponential
-from uber_rides.auth import AuthorizationCodeGrant
-from uber_rides.utils import auth as uber_auth_utils
 from app.services.upstash_redis import UpstashRedis
 from app.services.uber_service import (
-    book_ride,
-    cancel_ride,
-    get_ride_estimate,
-    get_ride_map,
-    get_ride_status,
-    serialize_oauth_credentials,
+    UberGuestRidesError,
+    get_guest_trip_estimates,
+    get_guest_trip_status,
 )
 load_dotenv()
 
@@ -48,10 +39,6 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("trafficly")
-
-# The unmaintained uber_rides SDK still points OAuth at login.uber.com.
-# Uber's current OAuth docs require auth.uber.com for authorize/token/revoke.
-uber_auth_utils.AUTH_HOST = "auth.uber.com"
 
 
 my_maps_client = Map_client(os.getenv("GOOGLE_MAPS_API_KEY"))
@@ -106,65 +93,6 @@ async def oauth_protected_resource():
     )
 
 
-   
-
-@app.get("/uber/auth/")
-async def callback(request: Request):
-    state = request.query_params.get("state")
-    code_present = bool(request.query_params.get("code"))
-    if not state or not code_present:
-        logger.warning("[UBER] callback rejected | missing_state=%s code_present=%s", not state, code_present)
-        return HTMLResponse(
-            "<h1>Uber authorization failed</h1><p>Missing authorization code or state.</p>",
-            status_code=400,
-        )
-
-    state_record = await upstash_redis.oauth_uber_store.get(f"state:{state}")
-    if not state_record or not state_record.get("client_id"):
-        logger.warning("[UBER] callback rejected | state_missing=true")
-        return HTMLResponse(
-            "<h1>Uber authorization expired</h1><p>Please return to Trafficly and connect Uber again.</p>",
-            status_code=400,
-        )
-
-    auth_flow = AuthorizationCodeGrant(
-        os.getenv("UBER_CLIENT_ID"),
-        {"profile", "email", "address", "payment_method", "request"},
-        os.getenv("UBER_CLIENT_SECRET"),
-        os.getenv("UBER_REDIRECT_URI"),
-        state_token=state,
-    )
-    try:
-        session = await asyncio.to_thread(auth_flow.get_session, str(request.url))
-        credentials = serialize_oauth_credentials(session.oauth2credential)
-        user_key = state_record["client_id"]
-        await upstash_redis.oauth_uber_store.put(f"token:{user_key}", credentials)
-        await upstash_redis.oauth_uber_store.delete(f"state:{state}")
-        logger.info(
-            "[UBER] callback success | user_key_source=%s user_key_hash=%s",
-            state_record.get("user_key_source", "unknown"),
-            _identity_digest(user_key),
-        )
-    except Exception:
-        logger.exception("[UBER] callback token exchange failed")
-        return HTMLResponse(
-            "<h1>Uber authorization failed</h1><p>Trafficly could not complete the token exchange.</p>",
-            status_code=500,
-        )
-
-    return HTMLResponse(
-        """
-        <!doctype html>
-        <html lang="en">
-        <head><meta charset="utf-8"><title>Uber connected</title></head>
-        <body style="font-family: system-ui, -apple-system, Segoe UI, sans-serif; padding: 32px;">
-          <h1>Uber connected</h1>
-          <p>You can close this window and return to Trafficly.</p>
-        </body>
-        </html>
-        """
-    )
-
 app.mount("/", mcp_app)
 
 
@@ -186,13 +114,6 @@ MAP_RESOURCE_CSP = ResourceCSP(
 )
 UBER_RESOURCE_CSP = ResourceCSP(
     resource_domains=["https://unpkg.com"],
-    frame_domains=[
-        "https://m.uber.com",
-        "https://trip.uber.com",
-        "https://riders.uber.com",
-        "https://www.uber.com",
-        "https://uber.com",
-    ],
 )
 
 
@@ -451,73 +372,8 @@ def uber_view() -> str:
     return UBER_HTML_PATH.read_text(encoding="utf-8")
 
 
-def _json_from_store(raw_value: Any) -> dict[str, Any]:
-    if raw_value is None:
-        return {}
-    if isinstance(raw_value, bytes):
-        raw_value = raw_value.decode("utf-8")
-    if isinstance(raw_value, str):
-        return json.loads(raw_value)
-    if isinstance(raw_value, dict):
-        return raw_value
-    return {}
-
-
-def _strip_internal_fields(payload: Any) -> Any:
-    if isinstance(payload, dict):
-        return {
-            key: _strip_internal_fields(value)
-            for key, value in payload.items()
-            if not key.startswith("_")
-        }
-    if isinstance(payload, list):
-        return [_strip_internal_fields(item) for item in payload]
-    return payload
-
-
 def _payload_keys(payload: Any) -> list[str]:
     return sorted(payload.keys()) if isinstance(payload, dict) else []
-
-
-def _identity_digest(value: str | None) -> str:
-    if not value:
-        return "none"
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
-
-
-def _uber_user_key(ctx: Context) -> tuple[str | None, str]:
-    access_token = get_access_token()
-    claims = getattr(access_token, "claims", {}) if access_token else {}
-    if isinstance(claims, dict):
-        for claim_name in ("sub", "user_id", "clerk_user_id"):
-            claim_value = claims.get(claim_name)
-            if claim_value:
-                return str(claim_value), f"access_token.claims.{claim_name}"
-
-    token_client_id = getattr(access_token, "client_id", None) if access_token else None
-    if token_client_id:
-        return str(token_client_id), "access_token.client_id"
-
-    if ctx.client_id:
-        return str(ctx.client_id), "ctx.client_id"
-
-    try:
-        return f"session:{ctx.session_id}", "ctx.session_id"
-    except RuntimeError:
-        return None, "missing"
-
-
-async def _persist_refreshed_uber_credentials(user_key: str, result: Any) -> Any:
-    if isinstance(result, dict) and isinstance(result.get("_oauth_credentials"), dict):
-        await upstash_redis.oauth_uber_store.put(
-            f"token:{user_key}",
-            result["_oauth_credentials"],
-        )
-        logger.debug(
-            "[UBER] refreshed credentials persisted | user_key_hash=%s",
-            _identity_digest(user_key),
-        )
-    return _strip_internal_fields(result)
 
 
 def _uber_tool_result(payload: dict[str, Any], fallback_text: str | None = None) -> ToolResult:
@@ -541,233 +397,95 @@ def _uber_error(message: str, **extra: Any) -> ToolResult:
     return _uber_tool_result(payload, message)
 
 
-def _normalize_uber_estimate_result(result: Any) -> dict[str, Any]:
-    price_data: dict[str, Any] = {}
-    time_data: dict[str, Any] = {}
-
-    if isinstance(result, dict) and ("price_response" in result or "time_response" in result):
-        price_data = result.get("price_response", {}) or {}
-        time_data = result.get("time_response", {}) or {}
-    elif isinstance(result, tuple):
-        if len(result) > 0 and isinstance(result[0], dict):
-            price_data = result[0]
-        if len(result) > 1 and isinstance(result[1], dict):
-            time_data = result[1]
-    elif isinstance(result, dict):
-        price_data = result
-
-    logger.info(
-        "[UBER] estimate normalize | price_keys=%s time_keys=%s",
-        _payload_keys(price_data),
-        _payload_keys(time_data),
-    )
-
-    estimates = (
-        price_data.get("prices")
-        or price_data.get("estimates")
-        or price_data.get("price_estimates")
-        or []
-    )
-    pickup_estimates = (
-        time_data.get("times")
-        or time_data.get("estimates")
-        or time_data.get("pickup_estimates")
-        or []
-    )
-    pickup_by_product = {
-        item.get("product_id"): item
-        for item in pickup_estimates
-        if isinstance(item, dict) and item.get("product_id")
-    }
-
-    merged_estimates = []
-    for estimate in estimates:
-        if not isinstance(estimate, dict):
-            continue
-        product_id = estimate.get("product_id")
-        pickup = pickup_by_product.get(product_id, {})
-        merged_estimate = {**estimate}
-        if pickup:
-            merged_estimate["pickup_estimate"] = pickup.get("estimate")
-        merged_estimates.append(merged_estimate)
-
-    return {
-        "estimates": merged_estimates or estimates,
-        "pickup_estimates": pickup_estimates,
-        "raw_price_response": price_data,
-        "raw_time_response": time_data,
-    }
-
-
 @mcp.tool(
     app=AppConfig(resource_uri=UBER_VIEW_URI),
     meta={"openai/outputTemplate": UBER_VIEW_URI},
 )
 async def Uber_tool(
-    start: Tuple[float, float],
-    end: Tuple[float, float],
-    ctx: Context,
-    intent: str,
+    start: Optional[Tuple[float, float]] = None,
+    end: Optional[Tuple[float, float]] = None,
+    intent: str = "price_estimate",
+    request_id: Optional[str] = None,
+    ctx: Context = CurrentContext(),
 ) -> ToolResult:
-    """Estimate, book, inspect, or cancel Uber rides for the current Trafficly user.
+    """Estimate or inspect Uber Guest Rides trips.
 
-    If the user has not connected Uber yet, this returns an auth UI with a
-    Continue to Uber button. Otherwise it returns structured Uber data for
-    the requested intent.
+    Guest Rides uses Trafficly's app credentials, not per-rider credentials. Booking is
+    intentionally gated in this pass; if the user asks to book, return the
+    missing guest/product details needed before creating a trip.
     """
-    user_key, user_key_source = _uber_user_key(ctx)
-    if not user_key:
-        logger.warning("[UBER] tool rejected | missing user identity source=%s", user_key_source)
-        return _uber_error("Trafficly could not identify the current user for Uber authorization.")
-
     normalized_intent = intent.lower().strip()
-    uber_raw = await upstash_redis.oauth_uber_store.get(f"token:{user_key}") or None
-    logger.info(
-        "[UBER] tool call | intent=%s token_present=%s user_key_source=%s user_key_hash=%s",
-        normalized_intent,
-        bool(uber_raw),
-        user_key_source,
-        _identity_digest(user_key),
-    )
-
-    if not uber_raw:
-        state = secrets.token_urlsafe(32)
-        scopes = {"profile", "email", "address", "payment_method", "request"}
-        auth_flow = AuthorizationCodeGrant(
-            os.getenv("UBER_CLIENT_ID"),
-            scopes,
-            os.getenv("UBER_CLIENT_SECRET"),
-            os.getenv("UBER_REDIRECT_URI"),
-            state_token=state,
-        )
-        oauth_url = auth_flow.get_authorization_url()
-        await upstash_redis.oauth_uber_store.put(
-            f"state:{state}",
-            {
-                "client_id": user_key,
-                "user_key_source": user_key_source,
-                "created_at": int(time.time()),
-            },
-            ttl=600,
-        )
-        logger.info(
-            "[UBER] auth required | state_created=true user_key_source=%s user_key_hash=%s",
-            user_key_source,
-            _identity_digest(user_key),
-        )
-        return _uber_tool_result(
-            {
-                "intent": "auth_required",
-                "uber_auth_url": oauth_url,
-                "message": (
-                    "Connect your Uber account to let Trafficly fetch estimates "
-                    "and manage ride requests."
-                ),
-                "data": {"scopes": sorted(scopes)},
-            }
-        )
-
-    try:
-        oauth_credentials = _json_from_store(uber_raw)
-    except json.JSONDecodeError:
-        logger.exception("[TOOL] Uber_tool failed to decode stored credentials")
-        return _uber_error(
-            "Trafficly could not read your stored Uber credentials. Please reconnect Uber."
-        )
-
+    logger.info("[UBER] tool call | intent=%s request_id_present=%s", normalized_intent, bool(request_id))
     try:
         if normalized_intent in {"estimate", "price_estimate", "ride_estimate"}:
-            result = await get_ride_estimate(start, end, oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(user_key, result)
-            data = _normalize_uber_estimate_result(result)
+            if not start or not end:
+                return _uber_error(
+                    "Trafficly needs pickup and dropoff coordinates to get Uber estimates.",
+                    data={"missing": ["start", "end"]},
+                )
+            data = await get_guest_trip_estimates(start, end)
+            logger.info("[UBER] estimate result | estimate_count=%s", len(data.get("estimates", [])))
             payload = {
                 "intent": "price_estimate",
                 "message": "Here are the Uber ride estimates Trafficly found.",
-                "data": {
-                    **data,
-                    "pickup": {"latitude": start[0], "longitude": start[1]},
-                    "dropoff": {"latitude": end[0], "longitude": end[1]},
-                },
+                "data": data,
+                "raw": data.get("raw", {}),
             }
             return _uber_tool_result(payload)
 
-        ride_id = await ctx.get_state("ride_id")
-
-        if normalized_intent == "book":
-            if ride_id:
-                return _uber_error(
-                    "There is already an active Uber ride request in this Trafficly session.",
-                    data={"ride_id": ride_id},
-                )
-            result = await book_ride(start, end, oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(user_key, result)
-            ride_id = result.get("request_id") or result.get("ride_id") or result.get("id")
-            if ride_id:
-                await ctx.set_state("ride_id", ride_id)
-            logger.info("[UBER] book result | keys=%s ride_id_present=%s", _payload_keys(result), bool(ride_id))
+        if normalized_intent in {"book", "request", "create_trip", "ride_booked"}:
             return _uber_tool_result(
                 {
-                    "intent": "ride_booked",
-                    "message": "Trafficly created the Uber ride request.",
+                    "intent": "booking_requires_details",
+                    "message": "Trafficly needs a few details before creating a Guest Ride.",
                     "data": {
-                        **result,
-                        "ride_id": ride_id,
-                        "pickup": {"latitude": start[0], "longitude": start[1]},
-                        "dropoff": {"latitude": end[0], "longitude": end[1]},
+                        "missing": [
+                            "guest first name",
+                            "guest last name",
+                            "guest phone number",
+                            "selected product_id from an estimate",
+                            "explicit booking confirmation",
+                        ],
+                        "pickup": {"latitude": start[0], "longitude": start[1]} if start else None,
+                        "dropoff": {"latitude": end[0], "longitude": end[1]} if end else None,
                     },
                 }
             )
 
-        if normalized_intent == "status":
+        if normalized_intent in {"status", "ride_status", "map", "ride_map", "tracking"}:
+            ride_id = request_id or await ctx.get_state("uber_request_id")
             if not ride_id:
-                return _uber_error("There is no active Uber ride request in this session.")
-            result = await get_ride_status(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(user_key, result)
-            logger.info("[UBER] status result | keys=%s", _payload_keys(result))
-            return _uber_tool_result(
-                {
-                    "intent": "ride_status",
-                    "message": "Here is the latest Uber ride status.",
-                    "data": {**result, "ride_id": ride_id},
-                }
-            )
-
-        if normalized_intent == "map":
-            if not ride_id:
-                return _uber_error("There is no active Uber ride request to map in this session.")
-            result = await get_ride_map(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(user_key, result)
+                return _uber_error(
+                    "Trafficly needs an Uber request_id to retrieve ride status or tracking.",
+                    data={"missing": ["request_id"]},
+                )
+            data = await get_guest_trip_status(request_id=ride_id)
             logger.info(
-                "[UBER] map result | keys=%s map_url_present=%s",
-                _payload_keys(result),
-                bool(result.get("map_url")),
+                "[UBER] status result | keys=%s tracking_url_present=%s",
+                _payload_keys(data),
+                bool(data.get("tracking_url")),
             )
-            return _uber_tool_result(
-                {
-                    "intent": "ride_map",
-                    "message": "Here are the latest Uber ride map details.",
-                    "data": {**result, "ride_id": ride_id},
-                }
-            )
-
-        if normalized_intent == "cancel":
-            if not ride_id:
-                return _uber_error("There is no active Uber ride request to cancel in this session.")
-            result = await cancel_ride(request_id=ride_id, oauth_credentials=oauth_credentials)
-            result = await _persist_refreshed_uber_credentials(user_key, result)
-            await ctx.set_state("ride_id", None)
-            logger.info("[UBER] cancel result | keys=%s", _payload_keys(result))
             return _uber_tool_result(
                 {
                     "intent": "ride_status",
-                    "message": "Trafficly cancelled the Uber ride request.",
-                    "data": {**result, "ride_id": ride_id, "status": "cancelled"},
+                    "message": "Here is the latest Uber Guest Ride status.",
+                    "data": data,
+                    "tracking_url": data.get("tracking_url"),
+                    "raw": data.get("raw", {}),
                 }
             )
 
         return _uber_error(
-            "Unsupported Uber intent. Use estimate, book, status, map, or cancel.",
+            "Unsupported Uber intent. Use price_estimate, ride_status, or book.",
             data={"intent": intent},
+        )
+    except UberGuestRidesError as exc:
+        logger.exception("[TOOL] Uber Guest Rides request failed | intent=%s status=%s", normalized_intent, exc.status_code)
+        return _uber_error(
+            "Trafficly could not complete the Uber Guest Rides request.",
+            error=str(exc),
+            status_code=exc.status_code,
+            data={"intent": intent, "uber_error": exc.payload},
         )
     except Exception as exc:
         logger.exception("[TOOL] Uber_tool failed | intent=%s", normalized_intent)
