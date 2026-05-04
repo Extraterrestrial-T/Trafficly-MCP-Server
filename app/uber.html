@@ -17,7 +17,7 @@
       --blue-dark: #185abc;
       --green: #15803d;
       --red: #b91c1c;
-      --shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+      --shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
     }
 
     * {
@@ -27,7 +27,7 @@
     html,
     body {
       width: 100%;
-      min-height: 760px;
+      min-height: 430px;
       margin: 0;
       background: var(--bg);
       color: var(--ink);
@@ -39,7 +39,7 @@
       display: flex;
       align-items: stretch;
       justify-content: center;
-      padding: 8px;
+      padding: 12px;
     }
 
     a {
@@ -49,9 +49,9 @@
     .shell {
       display: flex;
       flex-direction: column;
-      width: min(1040px, 100%);
-      min-height: 744px;
-      max-height: calc(100vh - 16px);
+      width: min(720px, 100%);
+      min-height: 406px;
+      max-height: calc(100vh - 24px);
       background: var(--surface);
       border: 1px solid var(--line);
       border-radius: 10px;
@@ -129,11 +129,9 @@
 
     .content {
       flex: 1;
-      display: flex;
-      flex-direction: column;
       min-height: 0;
       overflow-y: auto;
-      padding: 8px;
+      padding: 14px;
     }
 
     .empty,
@@ -160,16 +158,12 @@
     }
 
     .panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 680px;
-      padding: 8px;
+      padding: 18px;
     }
 
     .panel h2 {
-      margin: 0 0 4px;
-      font-size: 16px;
+      margin: 0 0 6px;
+      font-size: 20px;
       line-height: 1.2;
       letter-spacing: 0;
     }
@@ -177,14 +171,78 @@
     .panel p {
       margin: 0;
       color: var(--muted);
-      font-size: 12px;
+      font-size: 13px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 18px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #eff6ff 0%, #ffffff 64%);
+      border: 1px solid #bfdbfe;
+    }
+
+    .hero-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      margin-top: 6px;
+      max-width: 48ch;
+    }
+
+    .uber-mark {
+      display: grid;
+      place-items: center;
+      width: 62px;
+      height: 62px;
+      border-radius: 18px;
+      background: #000000;
+      color: #ffffff;
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .metric {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 17px;
     }
 
     .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin: 8px 0;
+      margin: 16px 0 0;
     }
 
     .primary-action,
@@ -193,7 +251,7 @@
       align-items: center;
       justify-content: center;
       min-height: 40px;
-      padding: 0 15px;
+      padding: 0 16px;
       border-radius: 8px;
       font-weight: 800;
       text-decoration: none;
@@ -202,6 +260,7 @@
     .primary-action {
       background: #000000;
       color: #ffffff;
+      min-width: 180px;
     }
 
     .secondary-action {
@@ -211,11 +270,10 @@
     }
 
     .route {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 8px;
-      padding: 8px;
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 14px;
       border-radius: 8px;
       background: var(--surface-soft);
     }
@@ -227,7 +285,7 @@
       min-width: 0;
       max-width: 100%;
       color: #334155;
-      font-size: 12px;
+      font-size: 13px;
     }
 
     .pin {
@@ -252,23 +310,13 @@
       white-space: nowrap;
     }
 
-    .frame-wrap {
-      flex: 1;
-      margin-top: 8px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--surface-soft);
-      min-height: 600px;
-    }
-
-    .uber-frame {
-      display: block;
-      width: 100%;
-      min-height: 680px;
-      height: 72vh;
-      border: 0;
-      background: #ffffff;
+    .note {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f8fafc;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .json-details {
@@ -285,17 +333,17 @@
 
     @media (max-width: 520px) {
       body {
-        padding: 6px;
+        padding: 8px;
       }
 
       html,
       body {
-        min-height: 680px;
+        min-height: 430px;
       }
 
       .shell {
-        min-height: 668px;
-        max-height: calc(100vh - 12px);
+        min-height: 410px;
+        max-height: calc(100vh - 16px);
       }
 
       .header {
@@ -311,16 +359,29 @@
       }
 
       .content {
-        padding: 6px;
+        padding: 10px;
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+        padding: 14px;
+      }
+
+      .uber-mark {
+        display: none;
+      }
+
+      .metrics {
+        grid-template-columns: 1fr;
       }
 
       .primary-action,
       .secondary-action {
         width: 100%;
-      }
-
-      .uber-frame {
-        min-height: 620px;
       }
     }
   </style>
@@ -460,6 +521,29 @@
         return rows.length ? '<div class="route">' + rows.join("") + '</div>' : "";
       }
 
+      function metricValue(data, keys, fallback) {
+        for (var i = 0; i < keys.length; i += 1) {
+          var value = getNested(data, [keys[i]]);
+          if (value !== null && typeof value !== "undefined" && value !== "") return value;
+        }
+        return fallback;
+      }
+
+      function renderMetrics(data) {
+        var time = metricValue(data, ["duration", "duration_min", "travel_time", "travelTime"], "Ready now");
+        if (typeof time === "number") time = time + " min";
+        var distance = metricValue(data, ["distance", "distance_km", "distanceKm"], "Uber will confirm");
+        if (typeof distance === "number") distance = distance + " km";
+        var stops = Array.isArray(data.dropoffs) ? Math.max(0, data.dropoffs.length - 1) : 0;
+        return [
+          '<div class="metrics">',
+          '<div class="metric"><span>Travel time</span><strong>' + escapeHtml(time) + '</strong></div>',
+          '<div class="metric"><span>Distance</span><strong>' + escapeHtml(distance) + '</strong></div>',
+          '<div class="metric"><span>Stops</span><strong>' + escapeHtml(stops ? stops : "Direct") + '</strong></div>',
+          '</div>'
+        ].join("");
+      }
+
       function renderHandoff(payload) {
         var data = payload.data || payload;
         var uberUrl = findUberUrl(payload);
@@ -475,12 +559,20 @@
         subtitle.textContent = "Uber will handle pricing and booking";
         content.innerHTML = [
           '<div class="panel">',
-          '<div class="actions">',
-          '<a class="primary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open Uber</a>',
-          '<a class="secondary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open in new tab</a>',
+          '<div class="hero">',
+          '<div>',
+          '<h2 class="hero-title">Your Uber handoff is ready</h2>',
+          '<p class="hero-copy">Trafficly has prefilled the ride. Continue in Uber to pick a product, see live pricing, add payment, and book.</p>',
           '</div>',
-          '<div class="frame-wrap"><iframe class="uber-frame" src="' + escapeHtml(uberUrl) + '" title="Uber ride handoff" referrerpolicy="no-referrer"></iframe></div>',
+          '<div class="uber-mark">Uber</div>',
+          '</div>',
+          renderMetrics(data),
           renderRoute(data),
+          '<div class="actions">',
+          '<a class="primary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Continue in Uber</a>',
+          '<a class="secondary-action" href="' + escapeHtml(uberUrl) + '" target="_blank" rel="noopener noreferrer">Open link</a>',
+          '</div>',
+          '<div class="note">Uber opens outside the chat so sign-in, payment, product selection, and booking stay secure.</div>',
           '</div>'
         ].join("");
       }
