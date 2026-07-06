@@ -12,7 +12,7 @@ from typing import Tuple
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastmcp import FastMCP
 from fastmcp.apps import AppConfig, ResourceCSP
 from fastmcp.dependencies import CurrentContext
@@ -90,6 +90,17 @@ async def oauth_protected_resource():
             "authorization_servers": [f"https://{CLERK_DOMAIN}"],
         }
     )
+
+
+LANDING_HTML_PATH = Path(__file__).parent / "landing.html"
+
+
+@app.get("/", response_class=HTMLResponse)
+async def landing_page():
+    html = LANDING_HTML_PATH.read_text(encoding="utf-8")
+    public_base_url = "https://trafficly-mcp-server.onrender.com"
+    mcp_base_url = MCP_SERVER_URL.rstrip("/")
+    return html.replace("__MCP_SERVER_URL__", mcp_base_url).replace(public_base_url, mcp_base_url)
 
 
 app.mount("/", mcp_app)
