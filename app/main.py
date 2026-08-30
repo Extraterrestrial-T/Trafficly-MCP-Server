@@ -107,7 +107,8 @@ async def landing_page():
 app.mount("/", mcp_app)
 
 
-VIEW_URI = "ui://trafficly/map.html"
+VIEW_URI = "ui://trafficly/map.v2.html"
+LEGACY_VIEW_URI = "ui://trafficly/map.html"
 UBER_VIEW_URI = "ui://trafficly/uber.html"
 MAP_HTML_PATH = Path(__file__).parent / "map.html"
 UBER_HTML_PATH = Path(__file__).parent / "uber.html"
@@ -380,6 +381,13 @@ def _normalize_route_payload(
 def map_view() -> str:
     html = MAP_HTML_PATH.read_text(encoding="utf-8")
     return html.replace("__CARTO_BASEMAP_API_KEY__", CARTO_BASEMAP_API_KEY)
+
+@mcp.resource(
+    LEGACY_VIEW_URI,
+    app=AppConfig(csp=MAP_RESOURCE_CSP),
+)
+def legacy_map_view() -> str:
+    return map_view()
 
 @mcp.resource(
     UBER_VIEW_URI,

@@ -56,7 +56,7 @@ It returns a proper MCP `ToolResult` with:
 
 - human-readable fallback text
 - structured route payload
-- `ui://trafficly/map.html` metadata
+- `ui://trafficly/map.v2.html` metadata
 - OpenAI `openai/outputTemplate` metadata
 
 ### `Uber_tool`
@@ -83,7 +83,7 @@ Typical input:
 Trafficly exposes two MCP app resources:
 
 ```text
-ui://trafficly/map.html
+ui://trafficly/map.v2.html
 ui://trafficly/uber.html
 ```
 
