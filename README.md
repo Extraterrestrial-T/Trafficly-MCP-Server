@@ -141,6 +141,7 @@ Uber
   - Routes API
 - Clerk OAuth application
 - Upstash Redis database
+- CARTO Basemaps API key
 - Uber client ID or deep-link client ID
 
 ## Environment Variables
@@ -149,6 +150,7 @@ Create a `.env` file for local development:
 
 ```env
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+CARTO_BASEMAP_API_KEY=your_carto_basemaps_api_key
 
 UPSTASH_REDIS_URL=your_upstash_redis_url
 FASTMCP_ENCRYPTION_KEY=your_fernet_key
@@ -164,6 +166,8 @@ UBER_DEEPLINK_STYLE=looking
 ```
 
 `UBER_CLIENT_ID` can be used instead of `UBER_DEEPLINK_CLIENT_ID`.
+
+`CARTO_BASEMAP_API_KEY` is used by the Leaflet map UI for CARTO basemap tiles.
 
 Supported Uber link styles:
 

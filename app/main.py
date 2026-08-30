@@ -49,6 +49,7 @@ upstash_redis = UpstashRedis(
 
 CLERK_DOMAIN = os.environ["CLERK_DOMAIN"]
 MCP_SERVER_URL = os.environ["MCP_SERVER_URL"]
+CARTO_BASEMAP_API_KEY = os.getenv("CARTO_BASEMAP_API_KEY", "").strip()
 
 auth = ClerkProvider(
     domain=CLERK_DOMAIN,
@@ -377,7 +378,8 @@ def _normalize_route_payload(
     app=AppConfig(csp=MAP_RESOURCE_CSP),
 )
 def map_view() -> str:
-    return MAP_HTML_PATH.read_text(encoding="utf-8")
+    html = MAP_HTML_PATH.read_text(encoding="utf-8")
+    return html.replace("__CARTO_BASEMAP_API_KEY__", CARTO_BASEMAP_API_KEY)
 
 @mcp.resource(
     UBER_VIEW_URI,
